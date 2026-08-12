@@ -28,13 +28,13 @@ public:
         QString stage;             // "Waiting", "Downloading", "Merging", ...
     };
 
-    explicit DownloadManager(Database *db, QObject *parent = nullptr);
+    explicit DownloadManager(Database* db, QObject* parent = nullptr);
     ~DownloadManager() override;
 
-    void setSettings(const Settings &s) { m_settings = s; }
+    void setSettings(const Settings& s) { m_settings = s; }
 
-    void enqueue(const QVector<VideoInfo> &videos, const QString &channelTitle,
-                 const QString &channelId);
+    void enqueue(const QVector<VideoInfo>& videos, const QString& channelTitle,
+        const QString& channelId);
     void cancel(qint64 videoPk);
     void cancelAll();
 
@@ -45,34 +45,37 @@ public:
 
 signals:
     void queueChanged();
-    void progress(const DownloadManager::Progress &p);
+    void progress(const DownloadManager::Progress& p);
     void videoStateChanged(qint64 videoPk, DownloadState state);
-    void videoFinished(qint64 videoPk, bool success, const QString &message);
-    void logMessage(const QString &line);
+    void videoFinished(qint64 videoPk, bool success, const QString& message);
+    void logMessage(const QString& line);
     void allFinished();
 
 private:
+    enum class Outcome { Success, Failed, Cancelled };
+
     struct Job {
         VideoInfo video;
+        bool      cancelled = false;
         QString   channelTitle;
         QString   channelId;
         QString   destinationDir;
         QString   printFilePath;
-        QProcess *process = nullptr;
+        QProcess* process = nullptr;
         QString   stderrBuffer;
         Progress  progress;
     };
 
     void pumpQueue();
-    void startJob(Job *job);
-    void handleStdout(Job *job);
-    void handleFinished(Job *job, int exitCode);
-    void finalize(Job *job, bool success, const QString &message);
-    void parseProgressLine(Job *job, const QString &line);
+    void startJob(Job* job);
+    void handleStdout(Job* job);
+    void handleFinished(Job* job, int exitCode);
+    void finalize(Job* job, Outcome outcome, const QString& message);
+    void parseProgressLine(Job* job, const QString& line);
 
-    Database          *m_db;
+    Database* m_db;
     Settings           m_settings;
-    QQueue<Job *>      m_queue;
-    QHash<qint64, Job *> m_active;
-    QHash<qint64, Job *> m_pendingByPk;   // everything not yet finished
+    QQueue<Job*>      m_queue;
+    QHash<qint64, Job*> m_active;
+    QHash<qint64, Job*> m_pendingByPk;   // everything not yet finished
 };

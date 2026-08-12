@@ -1,4 +1,4 @@
-; Inno Setup script for YouTube Archive.
+; Inno Setup script for YT Archive.
 ;
 ; Build with:  iscc /DAppVersion=0.1.0 packaging\ytarchive.iss
 ; Expects packaging\staging\ to hold a windeployqt-processed build. The
@@ -8,8 +8,8 @@
   #define AppVersion "0.1.0"
 #endif
 
-#define AppName       "YouTube Archive"
-#define AppPublisher  "YouTube Archive"
+#define AppName       "YT Archive"
+#define AppPublisher  "YT Archive"
 #define AppExeName    "ytarchive.exe"
 #define AppUrl        "https://github.com/a-woodpecker/ytarchive"
 
@@ -29,7 +29,7 @@ DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 UninstallDisplayIcon={app}\{#AppExeName}
 OutputDir=dist
-OutputBaseFilename=YouTubeArchive-{#AppVersion}-setup
+OutputBaseFilename=YTArchive-{#AppVersion}-setup
 LicenseFile=..\LICENSE.txt
 InfoAfterFile=after-install.txt
 

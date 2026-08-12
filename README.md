@@ -1,6 +1,6 @@
-# YouTube Archive
+# YT Archive
 
-A C++/Qt6 desktop application for archiving YouTube channels. It lists a
+A C++/Qt6 desktop application for archiving video channels. It lists a
 channel's uploads in a YouTube-style grid, lets you tick the videos you want,
 and downloads them into a per-channel folder tree indexed by a SQLite catalog.
 Every saved file is stamped with its **upload** date, not its download date.
@@ -376,7 +376,7 @@ Inno Setup installer in one pass. It needs [Inno Setup 6](https://jrsoftware.org
 
 ```
 
-The result is `packaging\dist\YouTubeArchive-<version>-setup.exe`. The version
+The result is `packaging\dist\YTArchive-<version>-setup.exe`. The version
 is read from `CMakeLists.txt`, so the installer filename and the binary's own
 update check can never disagree.
 

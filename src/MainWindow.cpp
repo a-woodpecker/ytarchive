@@ -130,6 +130,11 @@ MainWindow::MainWindow(QWidget* parent)
         });
     connect(m_downloadsPanel, &DownloadsPanel::cancelRequested, m_downloads,
         &DownloadManager::cancel);
+    connect(m_downloadsPanel, &DownloadsPanel::cancelAllRequested,
+        this, &MainWindow::cancelAllDownloads);
+    connect(m_downloads, &DownloadManager::queueChanged, this, [this] {
+        m_downloadsPanel->setQueueActive(m_downloads->isBusy());
+        });
 
     connect(m_thumbs, &ThumbnailCache::fetchFailed, this,
         [this](const QString& videoId, const QString& url, const QString& error) {
@@ -186,7 +191,7 @@ MainWindow::MainWindow(QWidget* parent)
         m_log->appendPlainText(ThumbnailCache::tlsDiagnostic());
         statusBar()->showMessage(
             tr("Thumbnails are unavailable: Qt has no working HTTPS support. "
-                "See the yt-dlp output tab."), 15000);
+                "See the Output tab."), 15000);
     }
 
     QSettings ui;
@@ -225,7 +230,7 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::buildUi()
 {
-    setWindowTitle(tr("YouTube Archive"));
+    setWindowTitle(tr("YT Archive"));
 
     // ---- navigation panel -------------------------------------------------
     auto* navDock = new QDockWidget(tr("Channels"), this);
@@ -420,7 +425,7 @@ void MainWindow::buildUi()
     m_downloadsDock->setWidget(m_downloadsPanel);
     addDockWidget(Qt::BottomDockWidgetArea, m_downloadsDock);
 
-    auto* logDock = new QDockWidget(tr("yt-dlp output"), this);
+    auto* logDock = new QDockWidget(tr("Output"), this);
     logDock->setObjectName(QStringLiteral("logDock"));
     m_log = new QPlainTextEdit(logDock);
     m_log->setReadOnly(true);
@@ -458,17 +463,16 @@ void MainWindow::buildActions()
     downloadMenu->addAction(tr("Download everything &missing"), this,
         &MainWindow::downloadEverythingMissing);
     downloadMenu->addSeparator();
-    downloadMenu->addAction(tr("&Cancel all"), this, [this] {
-        m_downloads->cancelAll();
-        statusBar()->showMessage(tr("Cancelled the queue."), 5000);
-        });
+    downloadMenu->addAction(tr("&Cancel all downloads"),
+        QKeySequence(QStringLiteral("Ctrl+Shift+X")),
+        this, &MainWindow::cancelAllDownloads);
 
     QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
     helpMenu->addAction(tr("Check for &updates…"), this, &MainWindow::checkForUpdates);
     helpMenu->addSeparator();
     helpMenu->addAction(tr("&About"), this, [this] {
-        QMessageBox::about(this, tr("About YouTube Archive"),
-            tr("<h3>YouTube Archive</h3>"
+        QMessageBox::about(this, tr("About YT Archive"),
+            tr("<h3>YT Archive</h3>"
                 "<p>A local archiving front-end for yt-dlp. Video files are stored on disk in "
                 "per-channel folders and indexed by a SQLite catalog, so the archive stays "
                 "readable with or without this program.</p>"
@@ -848,6 +852,21 @@ void MainWindow::onVideoActivated(const QModelIndex& index)
         return;
     }
     enqueue({ m_db.video(index.data(VideoModel::VideoPkRole).toLongLong()) });
+}
+
+void MainWindow::cancelAllDownloads()
+{
+    const int pending = m_downloads->activeCount() + m_downloads->queuedCount();
+    if (pending == 0) {
+        statusBar()->showMessage(tr("Nothing is downloading."), 4000);
+        return;
+    }
+
+    m_downloads->cancelAll();
+    m_log->appendPlainText(tr("Cancelled %n download(s).", "", pending));
+    statusBar()->showMessage(
+        tr("Cancelled %n download(s). Partly downloaded files are kept and resume "
+            "next time.", "", pending), 8000);
 }
 
 void MainWindow::checkForUpdates()

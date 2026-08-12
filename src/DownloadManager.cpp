@@ -104,7 +104,7 @@ void DownloadManager::startJob(Job* job)
         });
     connect(proc, &QProcess::errorOccurred, this, [this, job](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart) {
-            finalize(job, false,
+            finalize(job, Outcome::Failed,
                 tr("Could not run yt-dlp (looked for \"%1\"). Set its full path in "
                     "Preferences.").arg(m_settings.ytDlpPath));
         }
@@ -183,9 +183,16 @@ void DownloadManager::parseProgressLine(Job* job, const QString& line)
 
 void DownloadManager::handleFinished(Job* job, int exitCode)
 {
+    // Killing the process makes it exit non-zero. Without this check the user's
+    // own cancellation would be reported back to them as a download failure.
+    if (job->cancelled) {
+        finalize(job, Outcome::Cancelled, tr("Cancelled"));
+        return;
+    }
+
     if (exitCode != 0) {
         const QString detail = YtDlp::extractError(job->stderrBuffer);
-        finalize(job, false, detail.isEmpty()
+        finalize(job, Outcome::Failed, detail.isEmpty()
             ? tr("yt-dlp exited with code %1.").arg(exitCode)
             : detail);
         return;
@@ -204,7 +211,8 @@ void DownloadManager::handleFinished(Job* job, int exitCode)
     QFile::remove(job->printFilePath);
 
     if (mediaPath.isEmpty() || !QFileInfo::exists(mediaPath)) {
-        finalize(job, false, tr("The download reported success but no file was found on disk."));
+        finalize(job, Outcome::Failed,
+            tr("The download reported success but no file was found on disk."));
         return;
     }
 
@@ -245,10 +253,10 @@ void DownloadManager::handleFinished(Job* job, int exitCode)
             size, uploadDate);
     }
 
-    finalize(job, true, mediaPath);
+    finalize(job, Outcome::Success, mediaPath);
 }
 
-void DownloadManager::finalize(Job* job, bool success, const QString& message)
+void DownloadManager::finalize(Job* job, Outcome outcome, const QString& message)
 {
     const qint64 pk = job->video.pk;
 
@@ -259,15 +267,31 @@ void DownloadManager::finalize(Job* job, bool success, const QString& message)
     }
     QFile::remove(job->printFilePath);
 
-    if (!success && m_db)
-        m_db->setVideoState(pk, DownloadState::Failed, message);
+    DownloadState state = DownloadState::Downloaded;
+    switch (outcome) {
+    case Outcome::Success:
+        break;                                  // already recorded by the caller
+    case Outcome::Failed:
+        state = DownloadState::Failed;
+        if (m_db)
+            m_db->setVideoState(pk, state, message);
+        break;
+    case Outcome::Cancelled:
+        // Back to plain "not downloaded", so the card offers itself again
+        // rather than sitting there looking broken. Anything already fetched
+        // stays in .incomplete and resumes on the next attempt.
+        state = DownloadState::NotDownloaded;
+        if (m_db)
+            m_db->setVideoState(pk, state);
+        break;
+    }
 
     m_active.remove(pk);
     m_pendingByPk.remove(pk);
     delete job;
 
-    emit videoStateChanged(pk, success ? DownloadState::Downloaded : DownloadState::Failed);
-    emit videoFinished(pk, success, message);
+    emit videoStateChanged(pk, state);
+    emit videoFinished(pk, outcome == Outcome::Success, message);
 
     pumpQueue();
 }
@@ -275,11 +299,10 @@ void DownloadManager::finalize(Job* job, bool success, const QString& message)
 void DownloadManager::cancel(qint64 videoPk)
 {
     if (Job* job = m_active.value(videoPk, nullptr)) {
+        job->cancelled = true;
         if (job->process)
             job->process->kill();
-        // handleFinished will report the non-zero exit; mark intent clearly.
-        if (m_db)
-            m_db->setVideoState(videoPk, DownloadState::NotDownloaded);
+        // handleFinished sees the flag and reports a cancellation, not a failure.
         return;
     }
 

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds YouTube Archive and packages it into a Windows installer.
+    Builds YT Archive and packages it into a Windows installer.
 
 .DESCRIPTION
     Configures and builds with CMake, runs windeployqt to gather the Qt runtime
@@ -31,7 +31,7 @@ if (-not $Version) {
     if (-not $match) { throw "Could not read the version from CMakeLists.txt." }
     $Version = $match.Matches[0].Groups[1].Value
 }
-Write-Host "Building YouTube Archive $Version" -ForegroundColor Cyan
+Write-Host "Building YT Archive $Version" -ForegroundColor Cyan
 
 if (-not (Test-Path $QtDir))  { throw "Qt not found at $QtDir. Pass -QtDir." }
 if (-not (Test-Path $Iscc))   { throw "Inno Setup not found at $Iscc. Install it, or pass -Iscc." }
@@ -87,7 +87,7 @@ Write-Host "  staged: $staging"
 & $Iscc "/DAppVersion=$Version" (Join-Path $PSScriptRoot "ytarchive.iss")
 if ($LASTEXITCODE) { throw "Inno Setup failed." }
 
-$out = Join-Path $PSScriptRoot "dist\YouTubeArchive-$Version-setup.exe"
+$out = Join-Path $PSScriptRoot "dist\YTArchive-$Version-setup.exe"
 Write-Host "`nInstaller ready:" -ForegroundColor Green
 Write-Host "  $out"
 Write-Host "`nPublish it as a GitHub release asset tagged v$Version so the"

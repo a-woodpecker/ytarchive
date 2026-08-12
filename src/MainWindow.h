@@ -52,6 +52,7 @@ private slots:
     void onSyncProgress(int loaded, int total);
     void onVideoContextMenu(const QPoint& pos);
     void onVideoActivated(const QModelIndex& index);
+    void cancelAllDownloads();
     void checkForUpdates();
     void onUpdateAvailable(const UpdateChecker::Release& release, bool userInitiated);
 

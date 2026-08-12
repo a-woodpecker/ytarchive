@@ -1,4 +1,4 @@
-YouTube Archive needs two external tools to do its work:
+YT Archive needs two external tools to do its work:
 
   yt-dlp   - talks to YouTube
   ffmpeg   - merges the separate video and audio streams

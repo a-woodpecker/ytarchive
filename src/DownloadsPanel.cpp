@@ -14,44 +14,51 @@
 #include <QVBoxLayout>
 
 namespace {
-constexpr int kColTitle = 0;
-constexpr int kColProgress = 1;
-constexpr int kColStatus = 2;
+    constexpr int kColTitle = 0;
+    constexpr int kColProgress = 1;
+    constexpr int kColStatus = 2;
 
-QString rateText(double bytesPerSecond)
-{
-    if (bytesPerSecond <= 0)
-        return QString();
-    return formatBytes(static_cast<qint64>(bytesPerSecond)) + QStringLiteral("/s");
-}
+    QString rateText(double bytesPerSecond)
+    {
+        if (bytesPerSecond <= 0)
+            return QString();
+        return formatBytes(static_cast<qint64>(bytesPerSecond)) + QStringLiteral("/s");
+    }
 
-QString etaText(qint64 seconds)
-{
-    if (seconds < 0)
-        return QString();
-    if (seconds < 60)
-        return QCoreApplication::translate("DownloadsPanel", "%1s left").arg(seconds);
-    if (seconds < 3600)
-        return QCoreApplication::translate("DownloadsPanel", "%1m left").arg(seconds / 60);
-    return QCoreApplication::translate("DownloadsPanel", "%1h %2m left")
-        .arg(seconds / 3600).arg((seconds % 3600) / 60);
-}
+    QString etaText(qint64 seconds)
+    {
+        if (seconds < 0)
+            return QString();
+        if (seconds < 60)
+            return QCoreApplication::translate("DownloadsPanel", "%1s left").arg(seconds);
+        if (seconds < 3600)
+            return QCoreApplication::translate("DownloadsPanel", "%1m left").arg(seconds / 60);
+        return QCoreApplication::translate("DownloadsPanel", "%1h %2m left")
+            .arg(seconds / 3600).arg((seconds % 3600) / 60);
+    }
 } // namespace
 
-DownloadsPanel::DownloadsPanel(QWidget *parent)
+DownloadsPanel::DownloadsPanel(QWidget* parent)
     : QWidget(parent)
 {
-    auto *layout = new QVBoxLayout(this);
+    auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(8, 6, 8, 8);
     layout->setSpacing(6);
 
-    auto *header = new QHBoxLayout;
+    auto* header = new QHBoxLayout;
     m_summary = new QLabel(tr("Nothing in the queue"), this);
     m_summary->setObjectName(QStringLiteral("panelSummary"));
     header->addWidget(m_summary);
     header->addStretch();
 
-    auto *clearButton = new QPushButton(tr("Clear finished"), this);
+    m_cancelAll = new QPushButton(tr("Cancel all"), this);
+    m_cancelAll->setEnabled(false);
+    m_cancelAll->setToolTip(tr("Stop every running and queued download. "
+        "Partly downloaded files are kept and resume next time."));
+    connect(m_cancelAll, &QPushButton::clicked, this, &DownloadsPanel::cancelAllRequested);
+    header->addWidget(m_cancelAll);
+
+    auto* clearButton = new QPushButton(tr("Clear finished"), this);
     clearButton->setFlat(true);
     connect(clearButton, &QPushButton::clicked, this, &DownloadsPanel::clearCompleted);
     header->addWidget(clearButton);
@@ -72,26 +79,26 @@ DownloadsPanel::DownloadsPanel(QWidget *parent)
     m_tree->setColumnWidth(kColStatus, 260);
     layout->addWidget(m_tree);
 
-    connect(m_tree, &QTreeWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
-        QTreeWidgetItem *item = m_tree->itemAt(pos);
+    connect(m_tree, &QTreeWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        QTreeWidgetItem* item = m_tree->itemAt(pos);
         if (!item)
             return;
         QMenu menu(this);
-        QAction *cancelAction = menu.addAction(tr("Cancel this download"));
+        QAction* cancelAction = menu.addAction(tr("Cancel this download"));
         if (menu.exec(m_tree->viewport()->mapToGlobal(pos)) == cancelAction)
             emit cancelRequested(item->data(kColTitle, Qt::UserRole).toLongLong());
-    });
+        });
 }
 
-void DownloadsPanel::onProgress(const DownloadManager::Progress &p)
+void DownloadsPanel::onProgress(const DownloadManager::Progress& p)
 {
-    QTreeWidgetItem *item = m_rows.value(p.videoPk, nullptr);
+    QTreeWidgetItem* item = m_rows.value(p.videoPk, nullptr);
     if (!item) {
         item = new QTreeWidgetItem(m_tree);
         item->setData(kColTitle, Qt::UserRole, p.videoPk);
         m_rows.insert(p.videoPk, item);
 
-        auto *bar = new QProgressBar(m_tree);
+        auto* bar = new QProgressBar(m_tree);
         bar->setRange(0, 1000);
         bar->setTextVisible(true);
         bar->setFormat(QStringLiteral("%p%"));
@@ -104,11 +111,12 @@ void DownloadsPanel::onProgress(const DownloadManager::Progress &p)
     item->setText(kColTitle, label);
     item->setToolTip(kColTitle, label);
 
-    if (auto *bar = qobject_cast<QProgressBar *>(m_tree->itemWidget(item, kColProgress))) {
+    if (auto* bar = qobject_cast<QProgressBar*>(m_tree->itemWidget(item, kColProgress))) {
         if (p.fraction >= 0.0) {
             bar->setRange(0, 1000);
             bar->setValue(static_cast<int>(p.fraction * 1000));
-        } else {
+        }
+        else {
             bar->setRange(0, 0);   // busy indicator when the size is unknown
         }
     }
@@ -130,13 +138,13 @@ void DownloadsPanel::onProgress(const DownloadManager::Progress &p)
     updateSummary();
 }
 
-void DownloadsPanel::onFinished(qint64 videoPk, bool success, const QString &message)
+void DownloadsPanel::onFinished(qint64 videoPk, bool success, const QString& message)
 {
-    QTreeWidgetItem *item = m_rows.value(videoPk, nullptr);
+    QTreeWidgetItem* item = m_rows.value(videoPk, nullptr);
     if (!item)
         return;
 
-    if (auto *bar = qobject_cast<QProgressBar *>(m_tree->itemWidget(item, kColProgress))) {
+    if (auto* bar = qobject_cast<QProgressBar*>(m_tree->itemWidget(item, kColProgress))) {
         bar->setRange(0, 1000);
         bar->setValue(success ? 1000 : bar->value());
         bar->setEnabled(false);
@@ -148,12 +156,17 @@ void DownloadsPanel::onFinished(qint64 videoPk, bool success, const QString &mes
     updateSummary();
 }
 
+void DownloadsPanel::setQueueActive(bool active)
+{
+    m_cancelAll->setEnabled(active);
+}
+
 void DownloadsPanel::clearCompleted()
 {
     const QList<qint64> keys = m_rows.keys();
     for (qint64 pk : keys) {
-        QTreeWidgetItem *item = m_rows.value(pk);
-        auto *bar = qobject_cast<QProgressBar *>(m_tree->itemWidget(item, kColProgress));
+        QTreeWidgetItem* item = m_rows.value(pk);
+        auto* bar = qobject_cast<QProgressBar*>(m_tree->itemWidget(item, kColProgress));
         const bool finished = bar && !bar->isEnabled();
         if (finished) {
             m_rows.remove(pk);
@@ -167,8 +180,8 @@ void DownloadsPanel::updateSummary()
 {
     int active = 0;
     int done = 0;
-    for (QTreeWidgetItem *item : std::as_const(m_rows)) {
-        auto *bar = qobject_cast<QProgressBar *>(m_tree->itemWidget(item, kColProgress));
+    for (QTreeWidgetItem* item : std::as_const(m_rows)) {
+        auto* bar = qobject_cast<QProgressBar*>(m_tree->itemWidget(item, kColProgress));
         if (bar && bar->isEnabled())
             ++active;
         else
@@ -179,5 +192,5 @@ void DownloadsPanel::updateSummary()
         m_summary->setText(tr("Nothing in the queue"));
     else
         m_summary->setText(tr("%n in progress", "", active) +
-                           QStringLiteral("  ·  ") + tr("%n finished", "", done));
+            QStringLiteral("  ·  ") + tr("%n finished", "", done));
 }
