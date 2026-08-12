@@ -1,0 +1,304 @@
+#include "VideoCardDelegate.h"
+
+#include "Models.h"
+#include "VideoModel.h"
+
+#include <QApplication>
+#include <QDateTime>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QPainterPath>
+
+namespace {
+
+// Palette lifted from a dark YouTube surface so the grid reads as familiar.
+const QColor kCardHover      (0xFF, 0xFF, 0xFF, 18);
+const QColor kCardSelected   (0x3E, 0xA6, 0xFF, 40);
+const QColor kThumbBackground(0x18, 0x18, 0x18);
+const QColor kTitleColor     (0xF1, 0xF1, 0xF1);
+const QColor kMetaColor      (0xAA, 0xAA, 0xAA);
+const QColor kAccent         (0xFF, 0x00, 0x33);
+const QColor kBadgeBg        (0x00, 0x00, 0x00, 200);
+const QColor kArchivedBg     (0x2B, 0xA6, 0x40);
+const QColor kFailedBg       (0xCC, 0x33, 0x33);
+
+constexpr int kPad        = 8;
+constexpr int kThumbRadius = 10;
+constexpr int kCheckSize  = 22;
+
+// A stylesheet may specify font-size in pixels, in which case pointSizeF()
+// returns -1. Scale whichever unit the base font actually uses.
+QFont derivedFont(const QFont &base, double deltaPoints, bool bold)
+{
+    QFont f = base;
+    if (f.pointSizeF() > 0.0)
+        f.setPointSizeF(qMax(1.0, f.pointSizeF() + deltaPoints));
+    else if (f.pixelSize() > 0)
+        f.setPixelSize(qMax(1, qRound(f.pixelSize() + deltaPoints * 4.0 / 3.0)));
+    f.setBold(bold);
+    return f;
+}
+
+QString metaLine(const QModelIndex &index)
+{
+    QStringList bits;
+
+    const QDateTime uploaded = index.data(VideoModel::UploadDateRole).toDateTime();
+    if (uploaded.isValid()) {
+        QString date = uploaded.toLocalTime().toString(QStringLiteral("d MMM yyyy"));
+        if (index.data(VideoModel::DateApproxRole).toBool())
+            date.prepend(QStringLiteral("~"));
+        bits << date;
+    } else {
+        bits << QCoreApplication::translate("VideoCardDelegate", "Date unknown");
+    }
+
+    const qint64 views = index.data(VideoModel::ViewCountRole).toLongLong();
+    if (views >= 0)
+        bits << QCoreApplication::translate("VideoCardDelegate", "%1 views")
+                    .arg(formatCount(views));
+
+    return bits.join(QStringLiteral("  ·  "));
+}
+
+} // namespace
+
+VideoCardDelegate::VideoCardDelegate(QObject *parent)
+    : QStyledItemDelegate(parent)
+{
+}
+
+QSize VideoCardDelegate::sizeHint(const QStyleOptionViewItem &, const QModelIndex &) const
+{
+    return { kCardWidth, kCardHeight };
+}
+
+QRect VideoCardDelegate::thumbRect(const QRect &card)
+{
+    const int w = card.width() - 2 * kPad;
+    const int h = w * 9 / 16;
+    return { card.left() + kPad, card.top() + kPad, w, h };
+}
+
+QRect VideoCardDelegate::checkRect(const QRect &card)
+{
+    const QRect thumb = thumbRect(card);
+    return { thumb.left() + 6, thumb.top() + 6, kCheckSize, kCheckSize };
+}
+
+void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option,
+                              const QModelIndex &index) const
+{
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing, true);
+    painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+    const QRect card = option.rect;
+
+    // Card background: subtle, only on hover or selection.
+    if (option.state & QStyle::State_Selected) {
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(kCardSelected);
+        painter->drawRoundedRect(card.adjusted(2, 2, -2, -2), 12, 12);
+    } else if (option.state & QStyle::State_MouseOver) {
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(kCardHover);
+        painter->drawRoundedRect(card.adjusted(2, 2, -2, -2), 12, 12);
+    }
+
+    // --- thumbnail ---------------------------------------------------------
+    const QRect thumb = thumbRect(card);
+    QPainterPath clip;
+    clip.addRoundedRect(thumb, kThumbRadius, kThumbRadius);
+    painter->save();
+    painter->setClipPath(clip);
+    painter->fillRect(thumb, kThumbBackground);
+
+    const QPixmap pm = index.data(VideoModel::ThumbnailRole).value<QPixmap>();
+    if (!pm.isNull()) {
+        const QPixmap scaled = pm.scaled(thumb.size(), Qt::KeepAspectRatioByExpanding,
+                                         Qt::SmoothTransformation);
+        const QPoint topLeft(thumb.center().x() - scaled.width() / 2,
+                             thumb.center().y() - scaled.height() / 2);
+        painter->drawPixmap(topLeft, scaled);
+    } else {
+        painter->setPen(QColor(0x55, 0x55, 0x55));
+        painter->drawText(thumb, Qt::AlignCenter, QStringLiteral("▶"));
+    }
+    painter->restore();
+
+    const auto state = static_cast<DownloadState>(index.data(VideoModel::StateRole).toInt());
+    const double progressFraction = index.data(VideoModel::ProgressRole).toDouble();
+
+    // --- duration badge ----------------------------------------------------
+    const QString duration = formatDuration(index.data(VideoModel::DurationRole).toLongLong());
+    if (!duration.isEmpty()) {
+        const QFont badgeFont = derivedFont(option.font, -0.5, true);
+        painter->setFont(badgeFont);
+
+        const QFontMetrics fm(badgeFont);
+        const QRect textRect = fm.boundingRect(duration);
+        QRect badge(0, 0, textRect.width() + 10, fm.height() + 2);
+        badge.moveBottomRight(thumb.bottomRight() - QPoint(6, 6));
+
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(kBadgeBg);
+        painter->drawRoundedRect(badge, 4, 4);
+        painter->setPen(Qt::white);
+        painter->drawText(badge, Qt::AlignCenter, duration);
+    }
+
+    // --- state badge -------------------------------------------------------
+    QString stateText;
+    QColor  stateColor;
+    if (state == DownloadState::Downloaded) {
+        stateText = QStringLiteral("✓ ") + tr("Archived");
+        stateColor = kArchivedBg;
+    } else if (state == DownloadState::Failed) {
+        stateText = tr("Failed");
+        stateColor = kFailedBg;
+    } else if (state == DownloadState::Missing) {
+        stateText = tr("File missing");
+        stateColor = kFailedBg;
+    } else if (state == DownloadState::Queued) {
+        stateText = tr("Queued");
+        stateColor = QColor(0x60, 0x60, 0x60);
+    }
+    if (!stateText.isEmpty()) {
+        const QFont badgeFont = derivedFont(option.font, -0.5, true);
+        painter->setFont(badgeFont);
+
+        const QFontMetrics fm(badgeFont);
+        QRect badge(0, 0, fm.horizontalAdvance(stateText) + 12, fm.height() + 2);
+        badge.moveTopRight(thumb.topRight() - QPoint(6, -6));
+
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(stateColor);
+        painter->drawRoundedRect(badge, 4, 4);
+        painter->setPen(Qt::white);
+        painter->drawText(badge, Qt::AlignCenter, stateText);
+    }
+
+    // --- download progress bar across the bottom of the thumbnail ----------
+    if (state == DownloadState::Downloading) {
+        QRect bar(thumb.left(), thumb.bottom() - 4, thumb.width(), 4);
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(QColor(0xFF, 0xFF, 0xFF, 60));
+        painter->drawRect(bar);
+
+        painter->setBrush(kAccent);
+        if (progressFraction >= 0.0) {
+            QRect filled = bar;
+            filled.setWidth(static_cast<int>(bar.width() * progressFraction));
+            painter->drawRect(filled);
+        } else {
+            // Unknown total size: show a fixed marker rather than a fake value.
+            QRect filled = bar;
+            filled.setWidth(bar.width() / 6);
+            painter->drawRect(filled);
+        }
+    }
+
+    // --- checkbox ----------------------------------------------------------
+    const QRect check = checkRect(card);
+    const bool isChecked = index.data(Qt::CheckStateRole).toInt() == Qt::Checked;
+
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(QColor(0, 0, 0, 140));
+    painter->drawRoundedRect(check, 5, 5);
+    painter->setPen(QPen(isChecked ? kAccent : QColor(0xDD, 0xDD, 0xDD), 1.6));
+    painter->setBrush(isChecked ? kAccent : QColor(0, 0, 0, 0));
+    painter->drawRoundedRect(check.adjusted(3, 3, -3, -3), 3, 3);
+    if (isChecked) {
+        painter->setPen(QPen(Qt::white, 2.0));
+        const QRect inner = check.adjusted(6, 6, -6, -6);
+        painter->drawLine(inner.left(), inner.center().y(),
+                          inner.center().x() - 1, inner.bottom());
+        painter->drawLine(inner.center().x() - 1, inner.bottom(),
+                          inner.right(), inner.top());
+    }
+
+    // --- title -------------------------------------------------------------
+    const QFont titleFont = derivedFont(option.font, 0.5, true);
+    painter->setFont(titleFont);
+    painter->setPen(kTitleColor);
+
+    const QFontMetrics titleFm(titleFont);
+    QRect titleRect(card.left() + kPad, thumb.bottom() + 10,
+                    card.width() - 2 * kPad, titleFm.height() * 2 + 2);
+
+    // Manual two-line elision: Qt has no built-in multi-line elide.
+    const QString title = index.data(VideoModel::TitleRole).toString();
+    QString firstLine = title;
+    QString secondLine;
+    int split = -1;
+    for (int i = 1; i <= title.length(); ++i) {
+        if (titleFm.horizontalAdvance(title.left(i)) > titleRect.width()) {
+            split = title.left(i).lastIndexOf(QChar(' '));
+            if (split <= 0)
+                split = i - 1;
+            break;
+        }
+    }
+    if (split > 0) {
+        firstLine = title.left(split).trimmed();
+        secondLine = titleFm.elidedText(title.mid(split).trimmed(), Qt::ElideRight,
+                                        titleRect.width());
+    }
+    painter->drawText(QRect(titleRect.left(), titleRect.top(),
+                            titleRect.width(), titleFm.height()),
+                      Qt::AlignLeft | Qt::AlignVCenter, firstLine);
+    if (!secondLine.isEmpty()) {
+        painter->drawText(QRect(titleRect.left(), titleRect.top() + titleFm.height(),
+                                titleRect.width(), titleFm.height()),
+                          Qt::AlignLeft | Qt::AlignVCenter, secondLine);
+    }
+
+    // --- metadata line -----------------------------------------------------
+    const QFont metaFont = derivedFont(option.font, -0.5, false);
+    painter->setFont(metaFont);
+    painter->setPen(kMetaColor);
+
+    const QFontMetrics metaFm(metaFont);
+    QRect metaRect(titleRect.left(), titleRect.bottom() + 4,
+                   titleRect.width(), metaFm.height());
+
+    QString meta = metaLine(index);
+    if (state == DownloadState::Downloading) {
+        const QString progressText = index.data(VideoModel::ProgressTextRole).toString();
+        if (!progressText.isEmpty()) {
+            meta = progressText;
+            painter->setPen(kTitleColor);
+        }
+    } else if (state == DownloadState::Failed) {
+        const QString err = index.data(VideoModel::ErrorRole).toString();
+        if (!err.isEmpty()) {
+            meta = err;
+            painter->setPen(kFailedBg.lighter(130));
+        }
+    }
+    painter->drawText(metaRect, Qt::AlignLeft | Qt::AlignVCenter,
+                      metaFm.elidedText(meta, Qt::ElideRight, metaRect.width()));
+
+    painter->restore();
+}
+
+bool VideoCardDelegate::editorEvent(QEvent *event, QAbstractItemModel *model,
+                                    const QStyleOptionViewItem &option,
+                                    const QModelIndex &index)
+{
+    if (event->type() == QEvent::MouseButtonRelease) {
+        auto *me = static_cast<QMouseEvent *>(event);
+        if (me->button() == Qt::LeftButton) {
+            const QRect check = checkRect(option.rect);
+            // A generous hit area: the visible box plus a few pixels.
+            if (check.adjusted(-4, -4, 4, 4).contains(me->position().toPoint())) {
+                const bool isChecked = index.data(Qt::CheckStateRole).toInt() == Qt::Checked;
+                model->setData(index, isChecked ? Qt::Unchecked : Qt::Checked,
+                               Qt::CheckStateRole);
+                return true;
+            }
+        }
+    }
+    return QStyledItemDelegate::editorEvent(event, model, option, index);
+}

@@ -1,0 +1,20 @@
+YouTube Archive needs two external tools to do its work:
+
+  yt-dlp   - talks to YouTube
+  ffmpeg   - merges the separate video and audio streams
+
+Neither is bundled, so that each can be updated independently. yt-dlp in
+particular needs updating often, because YouTube changes frequently.
+
+The quickest way to install both, in a Command Prompt:
+
+  winget install -e --id yt-dlp.yt-dlp
+  winget install -e --id Gyan.FFmpeg
+
+Then reopen your terminal and check they respond:
+
+  yt-dlp --version
+  ffmpeg -version
+
+If either is not found, install it manually and point the program at it under
+File > Preferences > Locations.

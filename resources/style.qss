@@ -1,0 +1,293 @@
+/* Dark surface modelled on the YouTube web client: near-black canvas,
+   a slightly lighter chrome, and red reserved for the primary action. */
+
+QWidget {
+    background-color: #0f0f0f;
+    color: #f1f1f1;
+    font-size: 13px;
+}
+
+QMainWindow::separator {
+    background: #272727;
+    width: 1px;
+    height: 1px;
+}
+
+/* ---- navigation panel ---- */
+
+QDockWidget {
+    titlebar-close-icon: none;
+    color: #aaaaaa;
+    font-weight: 600;
+}
+
+QDockWidget::title {
+    background: #0f0f0f;
+    padding: 8px 12px;
+    border-bottom: 1px solid #272727;
+}
+
+QListWidget#channelList {
+    background: #0f0f0f;
+    border: none;
+    outline: none;
+    padding: 4px;
+}
+
+QListWidget#channelList::item {
+    border-radius: 10px;
+    padding: 8px 12px;
+    color: #f1f1f1;
+}
+
+QListWidget#channelList::item:hover {
+    background: #272727;
+}
+
+QListWidget#channelList::item:selected {
+    background: #3f3f3f;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+/* ---- channel header ---- */
+
+QWidget#channelHeader {
+    background: #0f0f0f;
+    border-bottom: 1px solid #272727;
+}
+
+QLabel#headerTitle {
+    font-size: 22px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+QLabel#headerMeta,
+QLabel#selectionLabel {
+    color: #aaaaaa;
+    font-size: 12px;
+}
+
+QLabel#hint {
+    color: #909090;
+    font-size: 12px;
+}
+
+QLabel#panelSummary {
+    color: #aaaaaa;
+}
+
+/* ---- filter bar ---- */
+
+QWidget#filterBar {
+    background: #0f0f0f;
+    border-bottom: 1px solid #272727;
+}
+
+QLineEdit {
+    background: #121212;
+    border: 1px solid #303030;
+    border-radius: 16px;
+    padding: 6px 12px;
+    color: #f1f1f1;
+    selection-background-color: #3ea6ff;
+}
+
+QLineEdit:focus {
+    border-color: #3ea6ff;
+}
+
+QComboBox {
+    background: #272727;
+    border: 1px solid #303030;
+    border-radius: 14px;
+    padding: 5px 12px;
+    min-width: 130px;
+}
+
+QComboBox::drop-down { border: none; width: 18px; }
+
+QComboBox QAbstractItemView {
+    background: #212121;
+    border: 1px solid #3f3f3f;
+    selection-background-color: #3f3f3f;
+    outline: none;
+}
+
+QToolButton {
+    background: #272727;
+    border: none;
+    border-radius: 14px;
+    padding: 6px 14px;
+    color: #f1f1f1;
+}
+
+QToolButton:hover { background: #3f3f3f; }
+QToolButton:pressed { background: #4a4a4a; }
+
+QPushButton {
+    background: #272727;
+    border: none;
+    border-radius: 16px;
+    padding: 7px 16px;
+    color: #f1f1f1;
+}
+
+QPushButton:hover { background: #3f3f3f; }
+QPushButton:disabled { background: #1c1c1c; color: #6b6b6b; }
+
+QPushButton#primaryButton {
+    background: #cc0000;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+QPushButton#primaryButton:hover { background: #e60000; }
+QPushButton#primaryButton:disabled { background: #3a1f1f; color: #8a6a6a; }
+
+/* ---- video grid ---- */
+
+QListView#videoGrid {
+    background: #0f0f0f;
+    border: none;
+    outline: none;
+    padding: 12px;
+}
+
+/* ---- downloads dock ---- */
+
+QTreeWidget {
+    background: #0f0f0f;
+    border: 1px solid #272727;
+    border-radius: 8px;
+    outline: none;
+}
+
+QTreeWidget::item { padding: 4px; }
+QTreeWidget::item:selected { background: #3f3f3f; }
+
+QHeaderView::section {
+    background: #181818;
+    color: #aaaaaa;
+    border: none;
+    border-bottom: 1px solid #272727;
+    padding: 6px;
+}
+
+QProgressBar {
+    background: #272727;
+    border: none;
+    border-radius: 6px;
+    height: 12px;
+    text-align: center;
+    color: #f1f1f1;
+    font-size: 10px;
+}
+
+QProgressBar::chunk {
+    background: #cc0000;
+    border-radius: 6px;
+}
+
+QPlainTextEdit {
+    background: #0b0b0b;
+    border: 1px solid #272727;
+    border-radius: 8px;
+    font-family: "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
+    font-size: 11px;
+    color: #cfcfcf;
+}
+
+/* ---- chrome ---- */
+
+QMenuBar { background: #0f0f0f; border-bottom: 1px solid #272727; }
+QMenuBar::item { padding: 6px 10px; background: transparent; }
+QMenuBar::item:selected { background: #272727; border-radius: 6px; }
+
+QMenu { background: #212121; border: 1px solid #3f3f3f; padding: 4px; }
+QMenu::item { padding: 6px 24px 6px 16px; border-radius: 6px; }
+QMenu::item:selected { background: #3f3f3f; }
+QMenu::item:disabled { color: #6b6b6b; }
+QMenu::separator { height: 1px; background: #3f3f3f; margin: 4px 8px; }
+
+QStatusBar { background: #0f0f0f; border-top: 1px solid #272727; color: #aaaaaa; }
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 12px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #3f3f3f;
+    border-radius: 6px;
+    min-height: 32px;
+}
+
+QScrollBar::handle:vertical:hover { background: #555555; }
+QScrollBar::add-line, QScrollBar::sub-line { height: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+
+QTabWidget::pane { border: 1px solid #272727; border-radius: 8px; }
+QTabBar::tab {
+    background: #181818;
+    padding: 7px 14px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    color: #aaaaaa;
+}
+QTabBar::tab:selected { background: #272727; color: #ffffff; }
+
+QCheckBox { spacing: 8px; padding: 3px 0; }
+QCheckBox::indicator {
+    width: 16px; height: 16px;
+    border: 1px solid #6b6b6b;
+    border-radius: 4px;
+    background: #181818;
+}
+QCheckBox::indicator:checked { background: #cc0000; border-color: #cc0000; }
+
+QSpinBox {
+    background: #181818;
+    border: 1px solid #303030;
+    border-radius: 6px;
+    padding: 4px 6px;
+}
+
+/* ---- channel sync progress banner ---- */
+
+QWidget#syncBanner {
+    background: #181818;
+    border-bottom: 1px solid #272727;
+}
+
+QLabel#syncLabel {
+    color: #f1f1f1;
+    font-size: 12px;
+}
+
+QProgressBar#syncBar {
+    background: #303030;
+    border: none;
+    border-radius: 3px;
+    height: 6px;
+}
+
+QProgressBar#syncBar::chunk {
+    background: #cc0000;
+    border-radius: 3px;
+}
+
+/* ---- update notice ---- */
+
+QWidget#updateBanner {
+    background: #1f2a17;
+    border-bottom: 1px solid #2f4022;
+}
+
+QLabel#updateLabel {
+    color: #d9f0c8;
+    font-size: 12px;
+    font-weight: 600;
+}
