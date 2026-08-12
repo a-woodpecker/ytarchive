@@ -14,6 +14,7 @@ Every saved file is stamped with its **upload** date, not its download date.
 - Concurrent downloads with live progress, speed and ETA
 - Left navigation panel listing every channel in the catalog
 - Search and filter by archive state
+- Dark and light themes, switchable without restarting
 - Saves sidecar metadata: `.info.json`, thumbnail, description, subtitles, optionally comments
 
 ## Requirements
@@ -443,7 +444,32 @@ comparison is numeric and tolerates a leading `v`, so `1.10.0` correctly beats
 | `UpdateChecker.*` | GitHub Releases polling and version comparison |
 | `MainWindow.*` | layout and wiring |
 | `packaging/` | Inno Setup script and one-shot build script |
+| `Theme.*` | the two colour schemes, and everything the cards paint |
 | `resources/style.qss` | dark theme |
+| `resources/style-light.qss` | light theme |
+
+## Themes
+
+**File > Preferences > Locations > Theme** offers Dark, Light, and *Match the
+system*. Changes apply immediately; no restart.
+
+A theme lives in two places that must be edited together:
+
+- `resources/style.qss` / `resources/style-light.qss` style everything Qt draws.
+- `Theme.cpp` holds the colours for everything painted by hand, which is the
+  video cards. `VideoCardDelegate` reads them through `Theme::palette()`, so a
+  card is never left dark on a light canvas.
+
+Switching themes explicitly repaints the grid. Restyling alone would not, since
+the delegate paints outside the stylesheet.
+
+*Match the system* needs Qt 6.5 or newer for `QStyleHints::colorScheme()`. On
+older Qt the option is shown but disabled rather than silently doing nothing,
+and Dark remains the default.
+
+Two colours are deliberately identical in both themes: the red accent, and the
+duration badge on each thumbnail. The badge sits on top of the artwork rather
+than the canvas, so a light badge would disappear against pale thumbnails.
 
 ## Known limitations
 

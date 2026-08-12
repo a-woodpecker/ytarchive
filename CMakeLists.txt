@@ -19,6 +19,7 @@ qt_add_executable(ytarchive
     src/main.cpp
     src/Models.h            src/Models.cpp
     src/Settings.h            src/Settings.cpp
+    src/Theme.h               src/Theme.cpp
     src/FileTime.h            src/FileTime.cpp
     src/Database.h            src/Database.cpp
     src/YtDlp.h               src/YtDlp.cpp
@@ -35,7 +36,7 @@ qt_add_executable(ytarchive
 
 qt_add_resources(ytarchive "appresources"
     PREFIX "/"
-    FILES resources/style.qss
+    FILES resources/style.qss resources/style-light.qss
 )
 
 # The sources are UTF-8 and contain characters like the middle dot used as a

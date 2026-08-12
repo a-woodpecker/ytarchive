@@ -34,28 +34,29 @@ Settings Settings::load()
 {
     QSettings s;
     Settings v;
-    v.archiveRoot = s.value("archiveRoot", defaultArchiveRoot()).toString();
-    v.ytDlpPath = s.value("ytDlpPath", v.ytDlpPath).toString();
-    v.ffmpegPath = s.value("ffmpegPath").toString();
-    v.maxConcurrent = s.value("maxConcurrent", v.maxConcurrent).toInt();
-    v.formatSelector = s.value("formatSelector", v.formatSelector).toString();
-    v.mergeContainer = s.value("mergeContainer", v.mergeContainer).toString();
-    v.rateLimitKiB = s.value("rateLimitKiB", 0).toInt();
-    v.retries = s.value("retries", v.retries).toInt();
-    v.writeInfoJson = s.value("writeInfoJson", true).toBool();
-    v.writeThumbnail = s.value("writeThumbnail", true).toBool();
-    v.writeDescription = s.value("writeDescription", true).toBool();
-    v.writeSubtitles = s.value("writeSubtitles", true).toBool();
-    v.writeAutoSubs = s.value("writeAutoSubs", false).toBool();
-    v.writeComments = s.value("writeComments", false).toBool();
-    v.embedMetadata = s.value("embedMetadata", true).toBool();
-    v.embedChapters = s.value("embedChapters", true).toBool();
-    v.cookiesFromBrowser = s.value("cookiesFromBrowser").toString();
-    v.cookiesFile = s.value("cookiesFile").toString();
-    v.filenameTemplate = s.value("filenameTemplate", v.filenameTemplate).toString();
+    v.archiveRoot       = s.value("archiveRoot", defaultArchiveRoot()).toString();
+    v.ytDlpPath         = s.value("ytDlpPath", v.ytDlpPath).toString();
+    v.ffmpegPath        = s.value("ffmpegPath").toString();
+    v.maxConcurrent     = s.value("maxConcurrent", v.maxConcurrent).toInt();
+    v.formatSelector    = s.value("formatSelector", v.formatSelector).toString();
+    v.mergeContainer    = s.value("mergeContainer", v.mergeContainer).toString();
+    v.rateLimitKiB      = s.value("rateLimitKiB", 0).toInt();
+    v.retries           = s.value("retries", v.retries).toInt();
+    v.writeInfoJson     = s.value("writeInfoJson", true).toBool();
+    v.writeThumbnail    = s.value("writeThumbnail", true).toBool();
+    v.writeDescription  = s.value("writeDescription", true).toBool();
+    v.writeSubtitles    = s.value("writeSubtitles", true).toBool();
+    v.writeAutoSubs     = s.value("writeAutoSubs", false).toBool();
+    v.writeComments     = s.value("writeComments", false).toBool();
+    v.embedMetadata     = s.value("embedMetadata", true).toBool();
+    v.embedChapters     = s.value("embedChapters", true).toBool();
+    v.cookiesFromBrowser= s.value("cookiesFromBrowser").toString();
+    v.cookiesFile       = s.value("cookiesFile").toString();
+    v.filenameTemplate  = s.value("filenameTemplate", v.filenameTemplate).toString();
+    v.theme             = s.value("theme", v.theme).toString();
     v.checkUpdatesOnStartup = s.value("checkUpdatesOnStartup", true).toBool();
-    v.skippedVersion = s.value("skippedVersion").toString();
-    v.lastUpdateCheck = s.value("lastUpdateCheck", 0).toLongLong();
+    v.skippedVersion    = s.value("skippedVersion").toString();
+    v.lastUpdateCheck   = s.value("lastUpdateCheck", 0).toLongLong();
     if (v.maxConcurrent < 1) v.maxConcurrent = 1;
     return v;
 }
@@ -82,6 +83,7 @@ void Settings::save() const
     s.setValue("cookiesFromBrowser", cookiesFromBrowser);
     s.setValue("cookiesFile", cookiesFile);
     s.setValue("filenameTemplate", filenameTemplate);
+    s.setValue("theme", theme);
     s.setValue("checkUpdatesOnStartup", checkUpdatesOnStartup);
     s.setValue("skippedVersion", skippedVersion);
     s.setValue("lastUpdateCheck", lastUpdateCheck);
@@ -92,7 +94,7 @@ QString Settings::databasePath() const
     return QDir(archiveRoot).filePath(QStringLiteral("catalog.db"));
 }
 
-QString Settings::channelDir(const QString& channelTitle, const QString& channelId) const
+QString Settings::channelDir(const QString &channelTitle, const QString &channelId) const
 {
     QString name = sanitizeForPath(channelTitle);
     if (name.isEmpty())
@@ -107,7 +109,7 @@ QString Settings::thumbnailCacheDir() const
     return QDir(archiveRoot).filePath(QStringLiteral(".cache/thumbnails"));
 }
 
-QString sanitizeForPath(const QString& in)
+QString sanitizeForPath(const QString &in)
 {
     static const QString illegal = QStringLiteral("<>:\"/\\|?*");
     QString out;

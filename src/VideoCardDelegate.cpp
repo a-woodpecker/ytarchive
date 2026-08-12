@@ -1,6 +1,7 @@
 #include "VideoCardDelegate.h"
 
 #include "Models.h"
+#include "Theme.h"
 #include "VideoModel.h"
 
 #include <QApplication>
@@ -11,16 +12,7 @@
 
 namespace {
 
-// Palette lifted from a dark YouTube surface so the grid reads as familiar.
-const QColor kCardHover      (0xFF, 0xFF, 0xFF, 18);
-const QColor kCardSelected   (0x3E, 0xA6, 0xFF, 40);
-const QColor kThumbBackground(0x18, 0x18, 0x18);
-const QColor kTitleColor     (0xF1, 0xF1, 0xF1);
-const QColor kMetaColor      (0xAA, 0xAA, 0xAA);
-const QColor kAccent         (0xFF, 0x00, 0x33);
-const QColor kBadgeBg        (0x00, 0x00, 0x00, 200);
-const QColor kArchivedBg     (0x2B, 0xA6, 0x40);
-const QColor kFailedBg       (0xCC, 0x33, 0x33);
+// All card colours come from the active theme; see Theme.cpp.
 
 constexpr int kPad        = 8;
 constexpr int kThumbRadius = 10;
@@ -89,6 +81,8 @@ QRect VideoCardDelegate::checkRect(const QRect &card)
 void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option,
                               const QModelIndex &index) const
 {
+    const ThemePalette &t = Theme::palette();
+
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing, true);
     painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
@@ -98,11 +92,11 @@ void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
     // Card background: subtle, only on hover or selection.
     if (option.state & QStyle::State_Selected) {
         painter->setPen(Qt::NoPen);
-        painter->setBrush(kCardSelected);
+        painter->setBrush(t.cardSelected);
         painter->drawRoundedRect(card.adjusted(2, 2, -2, -2), 12, 12);
     } else if (option.state & QStyle::State_MouseOver) {
         painter->setPen(Qt::NoPen);
-        painter->setBrush(kCardHover);
+        painter->setBrush(t.cardHover);
         painter->drawRoundedRect(card.adjusted(2, 2, -2, -2), 12, 12);
     }
 
@@ -112,7 +106,7 @@ void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
     clip.addRoundedRect(thumb, kThumbRadius, kThumbRadius);
     painter->save();
     painter->setClipPath(clip);
-    painter->fillRect(thumb, kThumbBackground);
+    painter->fillRect(thumb, t.thumbBackground);
 
     const QPixmap pm = index.data(VideoModel::ThumbnailRole).value<QPixmap>();
     if (!pm.isNull()) {
@@ -122,7 +116,7 @@ void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
                              thumb.center().y() - scaled.height() / 2);
         painter->drawPixmap(topLeft, scaled);
     } else {
-        painter->setPen(QColor(0x55, 0x55, 0x55));
+        painter->setPen(t.thumbPlaceholder);
         painter->drawText(thumb, Qt::AlignCenter, QStringLiteral("▶"));
     }
     painter->restore();
@@ -142,9 +136,9 @@ void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
         badge.moveBottomRight(thumb.bottomRight() - QPoint(6, 6));
 
         painter->setPen(Qt::NoPen);
-        painter->setBrush(kBadgeBg);
+        painter->setBrush(t.durationBadge);
         painter->drawRoundedRect(badge, 4, 4);
-        painter->setPen(Qt::white);
+        painter->setPen(t.durationBadgeText);
         painter->drawText(badge, Qt::AlignCenter, duration);
     }
 
@@ -153,16 +147,16 @@ void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
     QColor  stateColor;
     if (state == DownloadState::Downloaded) {
         stateText = QStringLiteral("✓ ") + tr("Archived");
-        stateColor = kArchivedBg;
+        stateColor = t.archived;
     } else if (state == DownloadState::Failed) {
         stateText = tr("Failed");
-        stateColor = kFailedBg;
+        stateColor = t.failed;
     } else if (state == DownloadState::Missing) {
         stateText = tr("File missing");
-        stateColor = kFailedBg;
+        stateColor = t.failed;
     } else if (state == DownloadState::Queued) {
         stateText = tr("Queued");
-        stateColor = QColor(0x60, 0x60, 0x60);
+        stateColor = t.queued;
     }
     if (!stateText.isEmpty()) {
         const QFont badgeFont = derivedFont(option.font, -0.5, true);
@@ -175,7 +169,7 @@ void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
         painter->setPen(Qt::NoPen);
         painter->setBrush(stateColor);
         painter->drawRoundedRect(badge, 4, 4);
-        painter->setPen(Qt::white);
+        painter->setPen(t.badgeText);
         painter->drawText(badge, Qt::AlignCenter, stateText);
     }
 
@@ -183,10 +177,10 @@ void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
     if (state == DownloadState::Downloading) {
         QRect bar(thumb.left(), thumb.bottom() - 4, thumb.width(), 4);
         painter->setPen(Qt::NoPen);
-        painter->setBrush(QColor(0xFF, 0xFF, 0xFF, 60));
+        painter->setBrush(t.progressTrack);
         painter->drawRect(bar);
 
-        painter->setBrush(kAccent);
+        painter->setBrush(t.accent);
         if (progressFraction >= 0.0) {
             QRect filled = bar;
             filled.setWidth(static_cast<int>(bar.width() * progressFraction));
@@ -204,13 +198,13 @@ void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
     const bool isChecked = index.data(Qt::CheckStateRole).toInt() == Qt::Checked;
 
     painter->setPen(Qt::NoPen);
-    painter->setBrush(QColor(0, 0, 0, 140));
+    painter->setBrush(t.checkboxBackground);
     painter->drawRoundedRect(check, 5, 5);
-    painter->setPen(QPen(isChecked ? kAccent : QColor(0xDD, 0xDD, 0xDD), 1.6));
-    painter->setBrush(isChecked ? kAccent : QColor(0, 0, 0, 0));
+    painter->setPen(QPen(isChecked ? t.accent : t.checkboxBorder, 1.6));
+    painter->setBrush(isChecked ? t.accent : QColor(0, 0, 0, 0));
     painter->drawRoundedRect(check.adjusted(3, 3, -3, -3), 3, 3);
     if (isChecked) {
-        painter->setPen(QPen(Qt::white, 2.0));
+        painter->setPen(QPen(t.checkboxTick, 2.0));
         const QRect inner = check.adjusted(6, 6, -6, -6);
         painter->drawLine(inner.left(), inner.center().y(),
                           inner.center().x() - 1, inner.bottom());
@@ -221,7 +215,7 @@ void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
     // --- title -------------------------------------------------------------
     const QFont titleFont = derivedFont(option.font, 0.5, true);
     painter->setFont(titleFont);
-    painter->setPen(kTitleColor);
+    painter->setPen(t.title);
 
     const QFontMetrics titleFm(titleFont);
     QRect titleRect(card.left() + kPad, thumb.bottom() + 10,
@@ -257,7 +251,7 @@ void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
     // --- metadata line -----------------------------------------------------
     const QFont metaFont = derivedFont(option.font, -0.5, false);
     painter->setFont(metaFont);
-    painter->setPen(kMetaColor);
+    painter->setPen(t.meta);
 
     const QFontMetrics metaFm(metaFont);
     QRect metaRect(titleRect.left(), titleRect.bottom() + 4,
@@ -268,13 +262,13 @@ void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
         const QString progressText = index.data(VideoModel::ProgressTextRole).toString();
         if (!progressText.isEmpty()) {
             meta = progressText;
-            painter->setPen(kTitleColor);
+            painter->setPen(t.title);
         }
     } else if (state == DownloadState::Failed) {
         const QString err = index.data(VideoModel::ErrorRole).toString();
         if (!err.isEmpty()) {
             meta = err;
-            painter->setPen(kFailedBg.lighter(130));
+            painter->setPen(t.errorText);
         }
     }
     painter->drawText(metaRect, Qt::AlignLeft | Qt::AlignVCenter,
