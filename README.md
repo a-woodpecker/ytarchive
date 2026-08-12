@@ -312,8 +312,8 @@ directory listing.
 Inno Setup installer in one pass. It needs [Inno Setup 6](https://jrsoftware.org/isdl.php).
 
 ```powershell
-.\packaging\build-installer.ps1 -QtDir C:\Qt\6.11.1\msvc2022_64 `
-                                 -GitHubRepo yourname/ytarchive
+.\packaging\build-installer.ps1 -QtDir C:\Qt\6.11.1\msvc2022_64
+
 ```
 
 The result is `packaging\dist\YouTubeArchive-<version>-setup.exe`. The version
@@ -342,12 +342,17 @@ Windows throughout.
 
 ## Update checking
 
-The application polls the GitHub Releases API for `YTA_GITHUB_REPO`, set at
-configure time:
+The application polls the GitHub Releases API for
+[`a-woodpecker/ytarchive`](https://github.com/a-woodpecker/ytarchive). Forks can
+repoint it at configure time:
 
 ```
-cmake -S . -B build -DYTA_GITHUB_REPO=yourname/ytarchive
+cmake -S . -B build -DYTA_GITHUB_REPO=you/yourfork
 ```
+
+Until the first release is published, a check reports that the repository has no
+releases yet. That is the expected response to GitHub's 404, not an error in the
+build.
 
 A background check runs at most once every 24 hours, a few seconds after launch;
 *Help > Check for updates* forces one. When a newer release exists, a banner

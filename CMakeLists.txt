@@ -9,8 +9,8 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets Sql Network)
 
-# Point this at your own repository before publishing a release.
-set(YTA_GITHUB_REPO "your-github-user/ytarchive"
+# Override only when building a fork:  -DYTA_GITHUB_REPO=you/yourfork
+set(YTA_GITHUB_REPO "a-woodpecker/ytarchive"
     CACHE STRING "GitHub 'owner/repo' polled for update checks")
 
 qt_standard_project_setup()

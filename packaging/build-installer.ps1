@@ -7,7 +7,7 @@
     into a staging folder, then compiles the Inno Setup script.
 
 .EXAMPLE
-    .\packaging\build-installer.ps1 -QtDir C:\Qt\6.11.1\msvc2022_64 -Version 0.1.0
+    .\packaging\build-installer.ps1 -QtDir C:\Qt\6.11.1\msvc2022_64
 #>
 
 [CmdletBinding()]
@@ -15,7 +15,7 @@ param(
     [string]$QtDir      = "C:\Qt\6.11.1\msvc2022_64",
     [string]$Version    = "",
     [string]$Preset     = "windows-vs2026",
-    [string]$GitHubRepo = "",
+    [string]$GitHubRepo = "a-woodpecker/ytarchive",
     [string]$Iscc       = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
 )
 
