@@ -1,55 +1,140 @@
-cmake_minimum_required(VERSION 3.19)
-project(YtArchive VERSION 0.1.0 LANGUAGES CXX)
+; Inno Setup script for YouTube Archive.
+;
+; Build with:  iscc /DAppVersion=0.1.0 packaging\ytarchive.iss
+; Expects packaging\staging\ to hold a windeployqt-processed build. The
+; build-installer.ps1 script in this folder does all of that for you.
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
+#ifndef AppVersion
+  #define AppVersion "0.1.0"
+#endif
 
-find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets Sql Network)
+#define AppName       "YouTube Archive"
+#define AppPublisher  "YouTube Archive"
+#define AppExeName    "ytarchive.exe"
+#define AppUrl        "https://github.com/a-woodpecker/ytarchive"
 
-# Override only when building a fork:  -DYTA_GITHUB_REPO=you/yourfork
-set(YTA_GITHUB_REPO "a-woodpecker/ytarchive"
-    CACHE STRING "GitHub 'owner/repo' polled for update checks")
+[Setup]
+; Keep this GUID stable forever: it is how Windows recognises an upgrade of an
+; existing install rather than a second, parallel copy.
+AppId={{8D3C2A17-6F4B-4E29-9C8A-5B1D7E0A4F63}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppVerName={#AppName} {#AppVersion}
+AppPublisher={#AppPublisher}
+AppSupportURL={#AppUrl}
+AppUpdatesURL={#AppUrl}/releases
+VersionInfoVersion={#AppVersion}
 
-qt_standard_project_setup()
+DefaultDirName={autopf}\{#AppName}
+DefaultGroupName={#AppName}
+UninstallDisplayIcon={app}\{#AppExeName}
+OutputDir=dist
+OutputBaseFilename=YouTubeArchive-{#AppVersion}-setup
+LicenseFile=..\LICENSE.txt
+InfoAfterFile=after-install.txt
 
-qt_add_executable(ytarchive
-    src/main.cpp
-    src/Models.h            src/Models.cpp
-    src/Settings.h            src/Settings.cpp
-    src/FileTime.h            src/FileTime.cpp
-    src/Database.h            src/Database.cpp
-    src/YtDlp.h               src/YtDlp.cpp
-    src/ChannelSync.h         src/ChannelSync.cpp
-    src/DownloadManager.h     src/DownloadManager.cpp
-    src/ThumbnailCache.h      src/ThumbnailCache.cpp
-    src/VideoModel.h          src/VideoModel.cpp
-    src/VideoCardDelegate.h   src/VideoCardDelegate.cpp
-    src/DownloadsPanel.h      src/DownloadsPanel.cpp
-    src/PreferencesDialog.h   src/PreferencesDialog.cpp
-    src/UpdateChecker.h       src/UpdateChecker.cpp
-    src/MainWindow.h          src/MainWindow.cpp
-)
+Compression=lzma2/max
+SolidCompression=yes
+WizardStyle=modern
+DisableProgramGroupPage=yes
 
-qt_add_resources(ytarchive "appresources"
-    PREFIX "/"
-    FILES resources/style.qss
-)
+; 64-bit only, matching the x64 Qt build.
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 
-target_compile_definitions(ytarchive PRIVATE
-    YTA_VERSION="${PROJECT_VERSION}"
-    YTA_GITHUB_REPO="${YTA_GITHUB_REPO}")
+; Offer a per-user install so administrator rights are not mandatory.
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog commandline
 
-target_link_libraries(ytarchive PRIVATE Qt6::Widgets Qt6::Sql Qt6::Network)
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
 
-set_target_properties(ytarchive PROPERTIES
-    WIN32_EXECUTABLE ON
-    MACOSX_BUNDLE ON
-)
+[Tasks]
+Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
-install(TARGETS ytarchive
-    BUNDLE  DESTINATION .
-    RUNTIME DESTINATION bin
-)
+[Files]
+Source: "staging\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
+Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; Written by code below, so Inno does not track it automatically.
+Type: files; Name: "{app}\defaults.ini"
+
+[Code]
+var
+  ArchivePage: TInputDirWizardPage;
+
+procedure InitializeWizard;
+begin
+  ArchivePage := CreateInputDirPage(wpSelectDir,
+    'Select Archive Folder',
+    'Where should downloaded videos be stored?',
+    'Videos are saved here in one subfolder per channel, alongside a catalog ' +
+    'database. Pick a drive with plenty of free space - an archive grows quickly.' + #13#10 + #13#10 +
+    'This folder is kept when you uninstall, and you can change it later in Preferences.',
+    False, '');
+  ArchivePage.Add('');
+  ArchivePage.Values[0] := ExpandConstant('{%USERPROFILE}\Videos\Archive');
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  Path: String;
+begin
+  Result := True;
+  if CurPageID = ArchivePage.ID then
+  begin
+    Path := Trim(ArchivePage.Values[0]);
+    if Path = '' then
+    begin
+      MsgBox('Please choose a folder for the archive.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+    // Fail here rather than after install, while the user can still correct it.
+    if not ForceDirectories(Path) then
+    begin
+      MsgBox('That folder could not be created:' + #13#10 + Path + #13#10 + #13#10 +
+             'Choose a different location.', mbError, MB_OK);
+      Result := False;
+    end;
+  end;
+end;
+
+function ArchiveRootForIni(Param: String): String;
+begin
+  // QSettings treats a backslash as an escape character when reading INI
+  // values, so store the path with forward slashes. Qt accepts them on Windows.
+  Result := ArchivePage.Values[0];
+  StringChangeEx(Result, '\', '/', True);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  IniPath: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    // The application reads this on first run, before any user settings exist.
+    IniPath := ExpandConstant('{app}\defaults.ini');
+    SaveStringToFile(IniPath,
+      '[General]' + #13#10 +
+      'archiveRoot=' + ArchiveRootForIni('') + #13#10, False);
+  end;
+end;
+
+function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo,
+  MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
+begin
+  Result := MemoDirInfo + NewLine + NewLine +
+            'Archive folder:' + NewLine + Space + ArchivePage.Values[0] + NewLine;
+  if MemoTasksInfo <> '' then
+    Result := Result + NewLine + MemoTasksInfo + NewLine;
+end;

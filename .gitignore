@@ -363,3 +363,6 @@ MigrationBackup/
 FodyWeavers.xsd
 
 build/
+tools/
+packaging/dist/
+packaging/staging/

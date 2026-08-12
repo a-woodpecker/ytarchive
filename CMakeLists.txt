@@ -38,6 +38,13 @@ qt_add_resources(ytarchive "appresources"
     FILES resources/style.qss
 )
 
+# The sources are UTF-8 and contain characters like the middle dot used as a
+# separator in the video cards. Without this, MSVC assumes the system ANSI
+# codepage for a file with no BOM and those literals become mojibake.
+if(MSVC)
+    target_compile_options(ytarchive PRIVATE /utf-8)
+endif()
+
 target_compile_definitions(ytarchive PRIVATE
     YTA_VERSION="${PROJECT_VERSION}"
     YTA_GITHUB_REPO="${YTA_GITHUB_REPO}")

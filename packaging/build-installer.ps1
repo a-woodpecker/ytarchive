@@ -76,6 +76,11 @@ if ($LASTEXITCODE) { throw "windeployqt failed." }
 if (-not (Test-Path (Join-Path $staging "sqldrivers\qsqlite.dll"))) {
     throw "qsqlite.dll is missing from the staging folder. Without it the catalog cannot open."
 }
+# The TLS backend is also a runtime plugin. Without it HTTPS silently fails,
+# which shows up as missing thumbnails while downloads still work.
+if (-not (Get-ChildItem (Join-Path $staging "tls") -Filter "*.dll" -ErrorAction SilentlyContinue)) {
+    throw "No TLS backend in staging\tls. Thumbnails would fail in the installed build."
+}
 Write-Host "  staged: $staging"
 
 # --- compile the installer ----------------------------------------------

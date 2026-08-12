@@ -34,6 +34,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
 private slots:
     void addChannel();
@@ -98,6 +99,7 @@ private:
 
     QStringList m_pendingSyncQueue;   // channel URLs waiting for "Sync all"
     bool m_syncingAll = false;
+    bool m_firstShowHandled = false;
     int  m_syncTotalCount = 0;        // channels in the current "Sync all" pass
     int  m_syncDoneCount = 0;
 };

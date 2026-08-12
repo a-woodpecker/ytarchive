@@ -29,6 +29,7 @@
 #include <QPlainTextEdit>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QSettings>
 #include <QStatusBar>
 #include <QTimer>
@@ -38,7 +39,24 @@
 
 namespace {
     constexpr qint64 kAllChannels = -1;
-}
+
+    // QListView scrolls by blitting the pixels it already has and repainting only
+    // the strip that just became visible. Any row erased but left outside that
+    // strip survives as a hairline across the grid. Repainting the whole viewport
+    // costs nothing at this item count and removes the entire class of artefact.
+    class SeamlessListView : public QListView
+    {
+    public:
+        using QListView::QListView;
+
+    protected:
+        void scrollContentsBy(int dx, int dy) override
+        {
+            QListView::scrollContentsBy(dx, dy);
+            viewport()->update();
+        }
+    };
+} // namespace
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -113,6 +131,27 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_downloadsPanel, &DownloadsPanel::cancelRequested, m_downloads,
         &DownloadManager::cancel);
 
+    connect(m_thumbs, &ThumbnailCache::fetchFailed, this,
+        [this](const QString& videoId, const QString& url, const QString& error) {
+            // Report the first handful only: one broken sync could otherwise write
+            // thousands of identical lines.
+            static int reported = 0;
+            if (reported == 0) {
+                // Printed once, alongside the first failure: if JPEG is absent the
+                // downloads are fine and the decoder is the whole problem.
+                m_log->appendPlainText(ThumbnailCache::imageFormatDiagnostic());
+            }
+            if (reported < 8) {
+                m_log->appendPlainText(tr("Thumbnail failed for %1: %2").arg(videoId, error));
+                if (!url.isEmpty())
+                    m_log->appendPlainText(QStringLiteral("  ") + url);
+            }
+            else if (reported == 8) {
+                m_log->appendPlainText(tr("Further thumbnail errors suppressed."));
+            }
+            ++reported;
+        });
+
     connect(m_updates, &UpdateChecker::updateAvailable, this, &MainWindow::onUpdateAvailable);
     connect(m_updates, &UpdateChecker::upToDate, this, [this](bool userInitiated) {
         m_settings.lastUpdateCheck = QDateTime::currentSecsSinceEpoch();
@@ -141,9 +180,31 @@ MainWindow::MainWindow(QWidget* parent)
         reloadChannels();
     }
 
+    // Checked once, up front: without TLS every thumbnail fetch fails while
+    // downloads keep working, because yt-dlp does its own networking.
+    if (!ThumbnailCache::httpsAvailable()) {
+        m_log->appendPlainText(ThumbnailCache::tlsDiagnostic());
+        statusBar()->showMessage(
+            tr("Thumbnails are unavailable: Qt has no working HTTPS support. "
+                "See the yt-dlp output tab."), 15000);
+    }
+
     QSettings ui;
-    restoreGeometry(ui.value(QStringLiteral("window/geometry")).toByteArray());
-    restoreState(ui.value(QStringLiteral("window/state")).toByteArray());
+    const QByteArray savedGeometry = ui.value(QStringLiteral("window/geometry")).toByteArray();
+    const QByteArray savedState = ui.value(QStringLiteral("window/state")).toByteArray();
+    if (!savedGeometry.isEmpty())
+        restoreGeometry(savedGeometry);
+    if (!savedState.isEmpty()) {
+        restoreState(savedState);
+    }
+    else {
+        // First run: the grid is the main event, the transfer list needs a few
+        // rows. Deferred, because resizing docks mid-construction leaves the
+        // layout settling while the first paint is already happening.
+        QTimer::singleShot(0, this, [this] {
+            resizeDocks({ m_downloadsDock }, { 200 }, Qt::Vertical);
+            });
+    }
 
     // At most one background check per day, and never before the window is up.
     const qint64 dayAgo = QDateTime::currentSecsSinceEpoch() - 24 * 60 * 60;
@@ -316,7 +377,7 @@ void MainWindow::buildUi()
     centralLayout->addWidget(bar);
 
     // Video grid
-    m_grid = new QListView(central);
+    m_grid = new SeamlessListView(central);
     m_grid->setObjectName(QStringLiteral("videoGrid"));
     m_grid->setModel(m_proxy);
     m_grid->setItemDelegate(new VideoCardDelegate(m_grid));
@@ -324,7 +385,14 @@ void MainWindow::buildUi()
     m_grid->setResizeMode(QListView::Adjust);
     m_grid->setMovement(QListView::Static);
     m_grid->setUniformItemSizes(true);
-    m_grid->setSpacing(6);
+
+    // An explicit grid with the gutters baked in, rather than setSpacing().
+    // Icon-mode layout with Adjust resizing places items itself, and letting it
+    // derive cell size from the size hint plus spacing leaves the geometry
+    // slightly indeterminate - which is where repaint seams come from.
+    m_grid->setSpacing(0);
+    m_grid->setGridSize(QSize(VideoCardDelegate::kCardWidth + 12,
+        VideoCardDelegate::kCardHeight + 12));
     m_grid->setMouseTracking(true);
     m_grid->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_grid->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -353,9 +421,6 @@ void MainWindow::buildUi()
     addDockWidget(Qt::BottomDockWidgetArea, logDock);
     tabifyDockWidget(m_downloadsDock, logDock);
     m_downloadsDock->raise();
-
-    // The grid is the main event; the transfer list only needs a few rows.
-    resizeDocks({ m_downloadsDock }, { 200 }, Qt::Vertical);
 
     statusBar()->showMessage(tr("Ready."));
 }
@@ -932,6 +997,27 @@ void MainWindow::setBusy(bool busy, const QString& message)
     QApplication::setOverrideCursor(busy ? Qt::BusyCursor : Qt::ArrowCursor);
     if (!busy)
         QApplication::restoreOverrideCursor();
+}
+
+void MainWindow::showEvent(QShowEvent* event)
+{
+    QMainWindow::showEvent(event);
+
+    if (m_firstShowHandled)
+        return;
+    m_firstShowHandled = true;
+
+    // The first paint runs while the dock layout is still settling, which can
+    // leave a row of the backing store written but never repainted - visible as
+    // a hairline wherever content should have been. Once the event loop has
+    // drained, repaint everything once. QWidget::update() does not recurse into
+    // children, so ask each of them directly.
+    QTimer::singleShot(0, this, [this] {
+        const QList<QWidget*> children = findChildren<QWidget*>();
+        for (QWidget* w : children)
+            w->update();
+        update();
+        });
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)
