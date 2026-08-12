@@ -7,7 +7,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-find_package(Qt6 6.2 REQUIRED COMPONENTS Widgets Sql Network)
+find_package(Qt6 6.3 REQUIRED COMPONENTS Widgets Sql Network)
 
 # Override only when building a fork:  -DYTA_GITHUB_REPO=you/yourfork
 set(YTA_GITHUB_REPO "a-woodpecker/ytarchive"
