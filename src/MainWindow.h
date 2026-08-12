@@ -35,6 +35,7 @@ public:
 protected:
     void closeEvent(QCloseEvent* event) override;
     void showEvent(QShowEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
 private slots:
     void addChannel();
@@ -66,6 +67,8 @@ private:
     qint64 currentChannelPk() const;
     ChannelInfo currentChannel() const;
     void setBusy(bool busy, const QString& message = QString());
+    void repaintAll();
+    void scheduleFullRepaint();
     void showSyncBanner(const QString& title);
     void hideSyncBanner();
     QString syncScopeLabel() const;
@@ -100,6 +103,7 @@ private:
     QStringList m_pendingSyncQueue;   // channel URLs waiting for "Sync all"
     bool m_syncingAll = false;
     bool m_firstShowHandled = false;
+    bool m_repaintQueued = false;
     int  m_syncTotalCount = 0;        // channels in the current "Sync all" pass
     int  m_syncDoneCount = 0;
 };

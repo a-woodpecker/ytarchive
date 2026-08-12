@@ -192,8 +192,17 @@ MainWindow::MainWindow(QWidget* parent)
     QSettings ui;
     const QByteArray savedGeometry = ui.value(QStringLiteral("window/geometry")).toByteArray();
     const QByteArray savedState = ui.value(QStringLiteral("window/state")).toByteArray();
-    if (!savedGeometry.isEmpty())
+    if (!savedGeometry.isEmpty()) {
         restoreGeometry(savedGeometry);
+    }
+    else {
+        // Only size the window when there is nothing to restore. Sizing it
+        // first and restoring afterwards lays the whole UI out at one geometry
+        // and then moves it to another before the first paint, which leaves
+        // rows of the backing store written at the old layout and never
+        // repainted at the new one.
+        resize(1360, 860);
+    }
     if (!savedState.isEmpty()) {
         restoreState(savedState);
     }
@@ -217,7 +226,6 @@ MainWindow::~MainWindow() = default;
 void MainWindow::buildUi()
 {
     setWindowTitle(tr("YouTube Archive"));
-    resize(1360, 860);
 
     // ---- navigation panel -------------------------------------------------
     auto* navDock = new QDockWidget(tr("Channels"), this);
@@ -999,6 +1007,40 @@ void MainWindow::setBusy(bool busy, const QString& message)
         QApplication::restoreOverrideCursor();
 }
 
+// QWidget::update() does not recurse into children, so each one is asked
+// directly. Cheap: it marks widgets dirty, it does not paint synchronously.
+void MainWindow::repaintAll()
+{
+    const QList<QWidget*> children = findChildren<QWidget*>();
+    for (QWidget* w : children)
+        w->update();
+    update();
+}
+
+void MainWindow::scheduleFullRepaint()
+{
+    if (m_repaintQueued)
+        return;
+    m_repaintQueued = true;
+    QTimer::singleShot(0, this, [this] {
+        m_repaintQueued = false;
+        repaintAll();
+        });
+}
+
+void MainWindow::resizeEvent(QResizeEvent* event)
+{
+    QMainWindow::resizeEvent(event);
+
+    // This is the moment that produces the hairline. Restoring a maximised
+    // geometry lays the UI out at the widget's initial size and then resizes
+    // it, and rows of the backing store written under the old layout can
+    // survive where the new layout never repaints them. Invalidating
+    // everything after each resize settles is cheap and removes the artefact
+    // at its source rather than waiting for the user to force a repaint.
+    scheduleFullRepaint();
+}
+
 void MainWindow::showEvent(QShowEvent* event)
 {
     QMainWindow::showEvent(event);
@@ -1007,17 +1049,10 @@ void MainWindow::showEvent(QShowEvent* event)
         return;
     m_firstShowHandled = true;
 
-    // The first paint runs while the dock layout is still settling, which can
-    // leave a row of the backing store written but never repainted - visible as
-    // a hairline wherever content should have been. Once the event loop has
-    // drained, repaint everything once. QWidget::update() does not recurse into
-    // children, so ask each of them directly.
-    QTimer::singleShot(0, this, [this] {
-        const QList<QWidget*> children = findChildren<QWidget*>();
-        for (QWidget* w : children)
-            w->update();
-        update();
-        });
+    scheduleFullRepaint();
+    // A second pass once the window manager has finished applying a restored
+    // maximised state, which can land after the first paint.
+    QTimer::singleShot(150, this, [this] { repaintAll(); });
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)
