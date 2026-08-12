@@ -29,9 +29,10 @@ Every saved file is stamped with its **upload** date, not its download date.
 aren't on `PATH`, set their full paths in **File → Preferences → Locations**.
 
 ```bash
-# Debian/Ubuntu
-sudo apt install qt6-base-dev libqt6sql6-sqlite cmake g++ ffmpeg
-pipx install yt-dlp        # or: pip install --user yt-dlp
+# Debian / Ubuntu
+sudo apt install qt6-base-dev libqt6sql6-sqlite qt6-wayland \
+                 cmake ninja-build g++ ffmpeg
+pipx install yt-dlp        # not the distro package: see the note below
 
 # macOS
 brew install qt cmake yt-dlp ffmpeg
@@ -50,6 +51,65 @@ cmake --build build -j
 ```
 
 On macOS you may need `-DCMAKE_PREFIX_PATH=$(brew --prefix qt)`.
+
+## Building on Linux
+
+Verified on a Debian-family system with Qt 6.4.
+
+```bash
+sudo apt install qt6-base-dev libqt6sql6-sqlite qt6-wayland \
+                 cmake ninja-build g++ ffmpeg
+```
+
+What each package is for, because two of them are runtime plugins that fail in
+confusing ways when absent:
+
+| Package | Why |
+|---|---|
+| `qt6-base-dev` | Widgets, Network, headers, CMake config |
+| `libqt6sql6-sqlite` | the SQLite driver. Without it the catalog will not open |
+| `qt6-wayland` | native Wayland platform plugin. Without it Qt falls back to XWayland |
+| `cmake ninja-build g++` | build tools |
+| `ffmpeg` | merges separate video and audio streams |
+
+**Do not install `yt-dlp` from apt.** The packaged version lags, and a stale
+yt-dlp fails against YouTube in ways that look like bugs in this program:
+
+```bash
+sudo apt install pipx && pipx install yt-dlp
+# keep it current:  pipx upgrade yt-dlp
+```
+
+Then build with the bundled preset:
+
+```bash
+cmake --preset unix
+cmake --build --preset unix
+./build/unix/ytarchive
+```
+
+Or without presets:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+```
+
+### Wayland notes
+
+On KDE Plasma under Wayland the app runs natively once `qt6-wayland` is
+installed. To check which backend is actually in use, or to force one:
+
+```bash
+QT_LOGGING_RULES="qt.qpa.*=true" ./build/unix/ytarchive 2>&1 | head
+QT_QPA_PLATFORM=wayland ./build/unix/ytarchive     # force native Wayland
+QT_QPA_PLATFORM=xcb     ./build/unix/ytarchive     # force XWayland
+```
+
+Wayland does not let a client position its own window, so saved window geometry
+is applied by the compositor rather than the application. Size is generally
+honoured; position may not be. Everything else, including the dock layout, is
+restored normally.
 
 ## Building on Windows
 
