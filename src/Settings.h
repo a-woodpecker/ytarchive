@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QProcessEnvironment>
 #include <QString>
 #include <QStringList>
 
@@ -53,6 +54,20 @@ struct Settings {
     QString channelDir(const QString &channelTitle, const QString &channelId) const;
     QString thumbnailCacheDir() const;
 };
+
+// Directories that commonly hold user-installed tools but are added to PATH by
+// shell startup files. A GUI application launched from a desktop menu never
+// sources those, so deno, yt-dlp installed with pipx, and similar are invisible
+// to it and to every process it starts.
+QStringList additionalToolPaths();
+
+// The system environment with the directories above prepended to PATH. Every
+// process this application starts uses it, so a child yt-dlp can find a
+// runtime that the desktop session did not put on PATH.
+QProcessEnvironment toolProcessEnvironment();
+
+// findExecutable, extended over the same directories.
+QString findToolExecutable(const QString &name);
 
 // Turns a channel name into something safe on every filesystem we care about.
 QString sanitizeForPath(const QString &in);

@@ -100,6 +100,9 @@ void DownloadManager::startJob(Job *job)
 
     auto *proc = new QProcess(this);
     job->process = proc;
+    // Widened PATH, so a child yt-dlp can find a JS runtime that the desktop
+    // session did not put on PATH.
+    proc->setProcessEnvironment(toolProcessEnvironment());
     proc->setProgram(m_settings.ytDlpPath);
     proc->setArguments(YtDlp::downloadArgs(job->video, job->destinationDir,
                                            job->printFilePath, m_settings));

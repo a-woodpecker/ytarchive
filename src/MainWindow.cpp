@@ -978,6 +978,7 @@ void MainWindow::cancelAllDownloads()
 void MainWindow::checkYtDlpVersion()
 {
     auto *proc = new QProcess(this);
+    proc->setProcessEnvironment(toolProcessEnvironment());
     proc->setProgram(m_settings.ytDlpPath);
     proc->setArguments({ QStringLiteral("--version") });
 
@@ -1007,20 +1008,33 @@ void MainWindow::checkYtDlpVersion()
                                                QStringLiteral("bun"),
                                                QStringLiteral("qjs") };
             QStringList found;
+            QString denoPath;
             for (const QString &r : runtimes) {
-                if (!QStandardPaths::findExecutable(r).isEmpty())
-                    found << r;
+                const QString path = findToolExecutable(r);
+                if (path.isEmpty())
+                    continue;
+                found << r;
+                if (r == QLatin1String("deno"))
+                    denoPath = path;
             }
+            if (!denoPath.isEmpty())
+                m_log->appendPlainText(tr("JavaScript runtime: %1").arg(denoPath));
             if (found.isEmpty()) {
                 m_log->appendPlainText(tr(
                     "No JavaScript runtime found (deno, node, bun or qjs). yt-dlp needs "
                     "one to sign media URLs: listings will work but downloads will fail "
                     "with HTTP 403. Install deno, or install another and name it under "
-                    "Preferences > Locations > JavaScript runtime."));
+                    "Preferences > Locations > JavaScript runtime.\n"
+                    "Searched PATH and: %1").arg(additionalToolPaths().isEmpty()
+                                                     ? tr("(no extra directories exist)")
+                                                     : additionalToolPaths().join(
+                                                           QStringLiteral(", "))));
                 statusBar()->showMessage(
                     tr("No JavaScript runtime found; downloads are likely to fail. "
                        "See the Output tab."), 20000);
-            } else if (!found.contains(QStringLiteral("deno"))) {
+            } else if (found.contains(QStringLiteral("deno"))) {
+                // Nothing to say: yt-dlp will use it automatically.
+            } else {
                 // Present but not the default, so yt-dlp will ignore it.
                 m_log->appendPlainText(tr(
                     "Found %1, but yt-dlp only uses deno automatically. Set "
@@ -1038,15 +1052,15 @@ void MainWindow::checkYtDlpVersion()
             return;
 
         const qint64 age = released.daysTo(QDate::currentDate());
-        if (age > 30) {
+        if (age > 60) {
             const QString warning =
-                tr("That copy of yt-dlp is %n day(s) old. The service changes often, and a "
-                   "stale yt-dlp fails in ways that look like faults in this program - "
-                   "most commonly HTTP 403. Update it.", "", static_cast<int>(age));
+                tr("That copy of yt-dlp is %n day(s) old, which may or may not be the "
+                   "newest release. If downloads are failing, check for an update before "
+                   "looking further.", "", static_cast<int>(age));
             m_log->appendPlainText(warning);
             statusBar()->showMessage(
-                tr("yt-dlp is %n day(s) old; consider updating it. See the Output tab.",
-                   "", static_cast<int>(age)), 15000);
+                tr("yt-dlp is %n day(s) old; check for an update if downloads fail.",
+                   "", static_cast<int>(age)), 12000);
         }
     });
 

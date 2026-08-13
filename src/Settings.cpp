@@ -111,6 +111,62 @@ QString Settings::thumbnailCacheDir() const
     return QDir(archiveRoot).filePath(QStringLiteral(".cache/thumbnails"));
 }
 
+QStringList additionalToolPaths()
+{
+    const QString home = QDir::homePath();
+    QStringList dirs{
+        home + QStringLiteral("/.deno/bin"),      // deno's own installer
+        home + QStringLiteral("/.local/bin"),     // pipx, pip --user
+        home + QStringLiteral("/.bun/bin"),
+        home + QStringLiteral("/.cargo/bin"),
+        home + QStringLiteral("/bin"),
+        QStringLiteral("/usr/local/bin"),
+        QStringLiteral("/opt/homebrew/bin"),      // Apple silicon Homebrew
+    };
+#ifdef Q_OS_WIN
+    const QString profile = qEnvironmentVariable("USERPROFILE");
+    if (!profile.isEmpty()) {
+        dirs << profile + QStringLiteral("/.deno/bin")
+             << profile + QStringLiteral("/.bun/bin");
+    }
+#endif
+
+    QStringList existing;
+    for (const QString &d : dirs)
+        if (QFileInfo::exists(d))
+            existing << QDir::cleanPath(d);
+    return existing;
+}
+
+QProcessEnvironment toolProcessEnvironment()
+{
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    const QStringList extras = additionalToolPaths();
+    if (extras.isEmpty())
+        return env;
+
+    const QString key = QStringLiteral("PATH");
+    const QString current = env.value(key);
+    const QChar sep = QDir::listSeparator();
+
+    // Prepended, so a user-installed tool beats an older packaged one.
+    QStringList merged = extras;
+    for (const QString &p : current.split(sep, Qt::SkipEmptyParts))
+        if (!merged.contains(p))
+            merged << p;
+
+    env.insert(key, merged.join(sep));
+    return env;
+}
+
+QString findToolExecutable(const QString &name)
+{
+    const QString onPath = QStandardPaths::findExecutable(name);
+    if (!onPath.isEmpty())
+        return onPath;
+    return QStandardPaths::findExecutable(name, additionalToolPaths());
+}
+
 QString sanitizeForPath(const QString &in)
 {
     static const QString illegal = QStringLiteral("<>:\"/\\|?*");

@@ -47,6 +47,7 @@ void ChannelSync::start(const QString &input)
 QProcess *ChannelSync::makeProcess()
 {
     auto *proc = new QProcess(this);
+    proc->setProcessEnvironment(toolProcessEnvironment());
     proc->setProgram(m_settings.ytDlpPath);
 
     connect(proc, &QProcess::readyReadStandardError, this, [this] {

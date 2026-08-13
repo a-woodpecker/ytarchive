@@ -90,8 +90,18 @@ curl -fsSL https://deno.land/install.sh | sh     # recommended, no extra config
 sudo apt install nodejs                          # then set the runtime to "node"
 ```
 
-The application checks for one at startup and warns in the Output tab if none
-is found, or if one is present but is not deno and so would be ignored.
+The application checks for one at startup and reports the path it found in the
+Output tab, warning if none is found or if one is present but is not deno and
+so would be ignored.
+
+**A runtime that works in a terminal can still be invisible to the
+application.** Deno's installer adds `~/.deno/bin` to `PATH` through your
+shell's startup file, and a program launched from a desktop menu never reads
+those. The same applies to yt-dlp installed with pipx, which lands in
+`~/.local/bin`. Every process this application starts therefore runs with
+`~/.deno/bin`, `~/.local/bin`, `~/.bun/bin`, `~/.cargo/bin`, `/usr/local/bin`
+and their equivalents prepended to `PATH`, so a child yt-dlp can find a runtime
+the desktop session did not expose.
 
 **Install yt-dlp yourself rather than from a distribution package.** Packaged
 versions lag badly, and a stale yt-dlp fails against the service in ways that
@@ -479,7 +489,9 @@ exists. In rough order of likelihood:
    `yt-dlp -v "<any video URL>" 2>&1 | grep -i "JS runtimes"`. If it reports
    `none`, that is the cause: install deno, or name another runtime in
    Preferences. Updating yt-dlp does not help, because the runtime is a
-   separate program.
+   separate program. Note that this command tests your *shell's* environment;
+   the Output tab reports what the application itself can see, which is the
+   one that matters.
 2. **yt-dlp is out of date.** The other common cause. The service changes
    how it signs media URLs specifically to break automated downloaders, and
    distribution packages lag badly. `yt-dlp --update-to nightly`, or
