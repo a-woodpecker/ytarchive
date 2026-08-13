@@ -326,21 +326,41 @@ yt-dlp is `Suggests`, not `Recommends`, on purpose - apt installs
 recommendations by default, and the packaged yt-dlp is old enough to fail
 immediately.
 
-#### The package is per-distribution
+#### Debian and Ubuntu from one package
 
-Build it on the machine you will install it on. A `.deb` built on Ubuntu will
-**not** install on Debian: Ubuntu renamed Qt's runtime packages with a `t64`
-suffix during the 64-bit `time_t` transition, so an Ubuntu-built package asks
-for `libqt6core6t64` while Debian provides `libqt6core6`. apt refuses it rather
-than installing something broken.
+Ubuntu renamed many library packages with a `t64` suffix during the 64-bit
+`time_t` transition; Debian did not, on 64-bit architectures. `dpkg-shlibdeps`
+can only name what is installed on the build machine, so each dependency is
+rewritten as an alternative covering both spellings:
 
-The build tags packages with the distribution codename to keep this visible -
-`ytarchive_0.1.0~noble_amd64.deb` versus `ytarchive_0.1.0~bookworm_amd64.deb`.
-Architecture is likewise whatever you built on.
+```
+Depends: libqt6core6t64 (>= 6.4.0) | libqt6core6 (>= 6.4.0), ...
+```
+
+apt is satisfied by either, so one package installs on both.
+
+**Naming is only half of it.** The binary is compiled against the glibc of the
+machine that built it, and that cannot be papered over with alternatives. The
+build prints the floor it produced:
+
+```
+==> Needs glibc >= 2.34
+```
+
+Debian 12 has 2.36, Ubuntu 24.04 has 2.39, Debian 13 has 2.41. A package built
+on Debian 12 installs on all three; one built on Ubuntu 24.04 may be refused by
+Debian 12 if it picked up a newer symbol. **Build on the oldest system you
+intend to support** - which is why the release workflow builds the `.deb`
+inside a `debian:12` container rather than on the Ubuntu runner.
+
+The distribution codename stays in the filename and version
+(`ytarchive_0.1.0~bookworm_amd64.deb`) as a record of where it was built.
+Architecture is likewise whatever you built on, so an arm64 machine needs its
+own build.
 
 | Distribution | Qt | Status |
 |---|---|---|
-| Debian 12 bookworm | 6.4 | works |
+| Debian 12 bookworm | 6.4 | works; the reference build target |
 | Debian 13 trixie | 6.8 | works |
 | Ubuntu 24.04 noble | 6.4 | works, verified |
 | Ubuntu 22.04 jammy | 6.2 | **too old**, below the 6.3 minimum |

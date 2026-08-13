@@ -43,15 +43,21 @@ jobs:
     name: Debian package
     needs: check-version
     runs-on: ubuntu-24.04
+    # Built inside Debian 12 rather than on the Ubuntu runner. Dependencies are
+    # declared as alternatives so the package installs on either distribution,
+    # but the binary is still compiled against whatever glibc built it - so
+    # building on the oldest supported system is what makes it portable
+    # forwards. The reverse would not install on Debian 12.
+    container: debian:12
     steps:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          apt-get update
+          apt-get install -y --no-install-recommends \
             qt6-base-dev libqt6sql6-sqlite qt6-wayland \
-            cmake ninja-build g++ dpkg-dev
+            cmake ninja-build g++ dpkg-dev ca-certificates
 
       - name: Build the package
         run: |

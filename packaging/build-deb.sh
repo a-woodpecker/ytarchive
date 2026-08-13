@@ -118,12 +118,57 @@ SHLIB_DEPS="$(cd "$SHLIB_WORK" && dpkg-shlibdeps -O --ignore-missing-info \
 [ -n "$SHLIB_DEPS" ] || die "dpkg-shlibdeps produced no dependencies"
 ok "$(echo "$SHLIB_DEPS" | tr ',' '\n' | wc -l) library dependencies resolved"
 
+# Ubuntu renamed many library packages with a t64 suffix during the 64-bit
+# time_t transition; Debian did not, on 64-bit architectures. dpkg-shlibdeps
+# can only name what is installed here, so each dependency is rewritten as an
+# alternative covering both spellings. apt is satisfied by either, which lets
+# one package install on both distributions.
+add_alternatives() {
+    local out="" dep name version alt
+    local IFS=,
+    for dep in $1; do
+        dep="$(echo "$dep" | sed 's/^ *//; s/ *$//')"
+        name="${dep%% *}"
+        version=""
+        case "$dep" in *" "*) version=" ${dep#* }" ;; esac
+
+        case "$name" in
+            *t64) alt="${name%t64}" ;;
+            libc6|libgcc-s1|libstdc++6) alt="" ;;   # never had a t64 variant
+            lib*)  alt="${name}t64" ;;
+            *)     alt="" ;;
+        esac
+
+        if [ -n "$alt" ]; then
+            dep="$name$version | $alt$version"
+        fi
+        out="${out:+$out, }$dep"
+    done
+    printf '%s' "$out"
+}
+
+SHLIB_DEPS="$(add_alternatives "$SHLIB_DEPS")"
+ok "rewritten with Debian/Ubuntu alternatives"
+
 # Loaded with dlopen at runtime, so no ELF reference exists for shlibdeps to
 # find. Without the SQLite driver the catalog cannot open at all.
-EXTRA_DEPS="libqt6sql6-sqlite, ffmpeg"
+EXTRA_DEPS="libqt6sql6-sqlite | libqt6sql6-sqlite-t64, ffmpeg"
 ALL_DEPS="$SHLIB_DEPS, $EXTRA_DEPS"
 
 INSTALLED_SIZE="$(du -ks "$STAGE_DIR/usr" | cut -f1)"
+
+# Alternatives fix the package *names*. They do not change which glibc the
+# binary was compiled against, which is the real limit on how old a system can
+# install it.
+# Anchored on the ">=" so the "6" in "libc6" is not mistaken for the version.
+GLIBC_MIN="$(printf '%s' "$SHLIB_DEPS" \
+             | sed -n 's/.*libc6 (>= \([0-9][0-9.]*\)).*/\1/p' | head -1)"
+if [ -n "$GLIBC_MIN" ]; then
+    info "Needs glibc >= $GLIBC_MIN"
+    printf '    %s\n' "Debian 12 has 2.36, Debian 13 has 2.41, Ubuntu 24.04 has 2.39."
+    printf '    %s\n' "Build on the oldest system you intend to support; a package built"
+    printf '    %s\n' "on a newer one may not install on an older one."
+fi
 
 # ---------------------------------------------------------------- control --
 
