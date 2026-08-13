@@ -1,5 +1,11 @@
 #include "ThumbnailCache.h"
 
+// Defined by the build from project(VERSION). The fallback only matters when
+// this file is compiled outside the application target, such as in a test.
+#ifndef YTA_VERSION
+#  define YTA_VERSION "0.0.0"
+#endif
+
 #include <QBuffer>
 #include <QCoreApplication>
 #include <QDir>
@@ -11,7 +17,7 @@
 #include <QStringList>
 #include <QUrlQuery>
 
-ThumbnailCache::ThumbnailCache(QObject* parent)
+ThumbnailCache::ThumbnailCache(QObject *parent)
     : QObject(parent)
 {
     m_memory.setMaxCost(600);   // roughly 600 cards held in RAM
@@ -27,18 +33,18 @@ QString ThumbnailCache::tlsDiagnostic()
 {
     QStringList lines;
     lines << QCoreApplication::translate("ThumbnailCache",
-        "Qt cannot make HTTPS connections, so no thumbnail can be downloaded.");
+              "Qt cannot make HTTPS connections, so no thumbnail can be downloaded.");
     lines << QCoreApplication::translate("ThumbnailCache",
-        "Build-time TLS support: %1").arg(QSslSocket::sslLibraryBuildVersionString());
+              "Build-time TLS support: %1").arg(QSslSocket::sslLibraryBuildVersionString());
     const QString runtime = QSslSocket::sslLibraryVersionString();
     lines << QCoreApplication::translate("ThumbnailCache",
-        "Runtime TLS library: %1").arg(runtime.isEmpty()
-            ? QCoreApplication::translate("ThumbnailCache",
-                "none found")
-            : runtime);
+              "Runtime TLS library: %1").arg(runtime.isEmpty()
+                                                 ? QCoreApplication::translate("ThumbnailCache",
+                                                       "none found")
+                                                 : runtime);
     lines << QCoreApplication::translate("ThumbnailCache",
-        "On Windows this usually means the tls\\qschannelbackend.dll plugin was not "
-        "copied next to the executable. Re-run windeployqt.");
+              "On Windows this usually means the tls\\qschannelbackend.dll plugin was not "
+              "copied next to the executable. Re-run windeployqt.");
     return lines.join(QChar('\n'));
 }
 
@@ -46,11 +52,11 @@ QString ThumbnailCache::imageFormatDiagnostic()
 {
     QStringList formats;
     const QList<QByteArray> supported = QImageReader::supportedImageFormats();
-    for (const QByteArray& f : supported)
+    for (const QByteArray &f : supported)
         formats << QString::fromLatin1(f);
 
     QString text = QCoreApplication::translate("ThumbnailCache",
-        "Image formats Qt can decode: %1").arg(formats.join(QStringLiteral(", ")));
+                       "Image formats Qt can decode: %1").arg(formats.join(QStringLiteral(", ")));
 
     // JPEG lives in a plugin (imageformats/qjpeg). Without it Qt handles only
     // the handful of formats compiled into QtGui, and every YouTube thumbnail
@@ -58,19 +64,19 @@ QString ThumbnailCache::imageFormatDiagnostic()
     if (!supported.contains("jpeg") && !supported.contains("jpg")) {
         text += QChar('\n');
         text += QCoreApplication::translate("ThumbnailCache",
-            "JPEG support is MISSING. Copy the imageformats plugin folder next to "
-            "the executable by running windeployqt.");
+                    "JPEG support is MISSING. Copy the imageformats plugin folder next to "
+                    "the executable by running windeployqt.");
     }
     return text;
 }
 
-void ThumbnailCache::setCacheDir(const QString& dir)
+void ThumbnailCache::setCacheDir(const QString &dir)
 {
     m_cacheDir = dir;
     QDir().mkpath(dir);
 }
 
-QString ThumbnailCache::diskPath(const QString& videoId) const
+QString ThumbnailCache::diskPath(const QString &videoId) const
 {
     return QDir(m_cacheDir).filePath(videoId + QStringLiteral(".jpg"));
 }
@@ -79,19 +85,19 @@ QString ThumbnailCache::diskPath(const QString& videoId) const
 // are served in whatever format the CDN prefers, which is often WebP - a format
 // Qt only decodes when the separate qtimageformats module is installed.
 // Dropping the query yields the plain, always-JPEG original.
-static QUrl withoutQuery(const QUrl& url)
+static QUrl withoutQuery(const QUrl &url)
 {
     QUrl bare = url;
     bare.setQuery(QString());
     return bare;
 }
 
-QPixmap ThumbnailCache::thumbnail(const QString& videoId, const QString& url)
+QPixmap ThumbnailCache::thumbnail(const QString &videoId, const QString &url)
 {
     if (videoId.isEmpty())
         return QPixmap();
 
-    if (QPixmap* cached = m_memory.object(videoId))
+    if (QPixmap *cached = m_memory.object(videoId))
         return *cached;
 
     // Second chance: the file may already be on disk from a previous session.
@@ -108,9 +114,9 @@ QPixmap ThumbnailCache::thumbnail(const QString& videoId, const QString& url)
         if (!m_failed.contains(videoId)) {
             m_failed.insert(videoId);
             emit fetchFailed(videoId, QString(),
-                QCoreApplication::translate(
-                    "ThumbnailCache",
-                    "no thumbnail URL in the channel listing"));
+                             QCoreApplication::translate(
+                                 "ThumbnailCache",
+                                 "no thumbnail URL in the channel listing"));
         }
         return QPixmap();
     }
@@ -122,24 +128,24 @@ QPixmap ThumbnailCache::thumbnail(const QString& videoId, const QString& url)
     return QPixmap();
 }
 
-void ThumbnailCache::startFetch(const QString& videoId, const QUrl& url)
+void ThumbnailCache::startFetch(const QString &videoId, const QUrl &url)
 {
     m_inFlight.insert(videoId);
 
     QNetworkRequest request{ url };
     request.setAttribute(QNetworkRequest::CacheLoadControlAttribute,
-        QNetworkRequest::PreferCache);
-    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("YtArchive/0.1"));
+                         QNetworkRequest::PreferCache);
+    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("YtArchive/" YTA_VERSION));
 
-    QNetworkReply* reply = m_net.get(request);
+    QNetworkReply *reply = m_net.get(request);
     connect(reply, &QNetworkReply::finished, this, [this, reply, videoId, url] {
         reply->deleteLater();
         m_inFlight.remove(videoId);
 
-        auto giveUp = [this, videoId, url](const QString& reason) {
+        auto giveUp = [this, videoId, url](const QString &reason) {
             m_failed.insert(videoId);
             emit fetchFailed(videoId, url.toString(), reason);
-            };
+        };
 
         if (reply->error() != QNetworkReply::NoError) {
             // One retry covers a transient hiccup without blanking the card
@@ -172,23 +178,23 @@ void ThumbnailCache::startFetch(const QString& videoId, const QUrl& url)
                 reply->header(QNetworkRequest::ContentTypeHeader).toString();
             const QString detected = QString::fromLatin1(reader.format());
             giveUp(QCoreApplication::translate("ThumbnailCache",
-                "could not decode the image (%1 bytes, Content-Type \"%2\", "
-                "detected format \"%3\"): %4")
-                .arg(data.size())
-                .arg(contentType.isEmpty()
-                    ? QCoreApplication::translate("ThumbnailCache", "unknown")
-                    : contentType)
-                .arg(detected.isEmpty()
-                    ? QCoreApplication::translate("ThumbnailCache", "unrecognised")
-                    : detected)
-                .arg(reader.errorString()));
+                       "could not decode the image (%1 bytes, Content-Type \"%2\", "
+                       "detected format \"%3\"): %4")
+                       .arg(data.size())
+                       .arg(contentType.isEmpty()
+                                ? QCoreApplication::translate("ThumbnailCache", "unknown")
+                                : contentType)
+                       .arg(detected.isEmpty()
+                                ? QCoreApplication::translate("ThumbnailCache", "unrecognised")
+                                : detected)
+                       .arg(reader.errorString()));
             return;
         }
 
         const QPixmap pm = QPixmap::fromImage(image);
         if (pm.isNull()) {
             giveUp(QCoreApplication::translate("ThumbnailCache",
-                "the decoded image was empty"));
+                                               "the decoded image was empty"));
             return;
         }
 
@@ -202,5 +208,5 @@ void ThumbnailCache::startFetch(const QString& videoId, const QUrl& url)
 
         m_memory.insert(videoId, new QPixmap(pm));
         emit ready(videoId);
-        });
+    });
 }

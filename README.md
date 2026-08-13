@@ -354,7 +354,7 @@ intend to support** - which is why the release workflow builds the `.deb`
 inside a `debian:12` container rather than on the Ubuntu runner.
 
 The distribution codename stays in the filename and version
-(`ytarchive_0.1.0~bookworm_amd64.deb`) as a record of where it was built.
+(`ytarchive_0.1.1~bookworm_amd64.deb`) as a record of where it was built.
 Architecture is likewise whatever you built on, so an arm64 machine needs its
 own build.
 
