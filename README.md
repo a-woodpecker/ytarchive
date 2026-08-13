@@ -354,7 +354,7 @@ intend to support** - which is why the release workflow builds the `.deb`
 inside a `debian:12` container rather than on the Ubuntu runner.
 
 The distribution codename stays in the filename and version
-(`ytarchive_0.2.0~bookworm_amd64.deb`) as a record of where it was built.
+(`ytarchive_0.2.1~bookworm_amd64.deb`) as a record of where it was built.
 Architecture is likewise whatever you built on, so an arm64 machine needs its
 own build.
 
@@ -415,10 +415,10 @@ architecture, then by distribution codename where the name carries one:
 
 | Running on | Offered |
 |---|---|
-| Windows x86_64 | `YTArchive-0.2.0-setup.exe` |
-| Debian 12 amd64 | `ytarchive_0.2.0~bookworm_amd64.deb` |
-| Ubuntu 24.04 amd64 | `ytarchive_0.2.0~noble_amd64.deb` |
-| Debian arm64 | `ytarchive_0.2.0~bookworm_arm64.deb` |
+| Windows x86_64 | `YTArchive-0.2.1-setup.exe` |
+| Debian 12 amd64 | `ytarchive_0.2.1~bookworm_amd64.deb` |
+| Ubuntu 24.04 amd64 | `ytarchive_0.2.1~noble_amd64.deb` |
+| Debian arm64 | `ytarchive_0.2.1~bookworm_arm64.deb` |
 | Anything with no matching build | the release page |
 
 Each narrowing step is skipped when it would leave nothing, so a release with a
