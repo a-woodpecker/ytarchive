@@ -405,9 +405,24 @@ repoint it with `-DYTA_GITHUB_REPO=you/yourfork` at configure time.
 
 A background check runs at most once every 24 hours, a few seconds after launch;
 *Help > Check for updates* forces one. When a newer release exists a banner
-offers the installer download, the release notes and *Skip this version*. Drafts
-and pre-releases are ignored. Until a first release is published, checks report
-that the repository has no releases - the expected response to GitHub's 404.
+offers the download, the release notes and *Skip this version*. Drafts and
+pre-releases are ignored. Until a first release is published, checks report that
+the repository has no releases - the expected response to GitHub's 404.
+
+The download offered is chosen for the machine asking. A release carries builds
+for every platform, so the asset is filtered by extension, then by CPU
+architecture, then by distribution codename where the name carries one:
+
+| Running on | Offered |
+|---|---|
+| Windows x86_64 | `YTArchive-0.2.0-setup.exe` |
+| Debian 12 amd64 | `ytarchive_0.2.0~bookworm_amd64.deb` |
+| Ubuntu 24.04 amd64 | `ytarchive_0.2.0~noble_amd64.deb` |
+| Debian arm64 | `ytarchive_0.2.0~bookworm_arm64.deb` |
+| Anything with no matching build | the release page |
+
+Each narrowing step is skipped when it would leave nothing, so a release with a
+single unlabelled build is still offered rather than withheld.
 
 **Nothing is ever downloaded or installed automatically.** Silently swapping the
 binary underneath a program whose job is not losing data is a poor trade, so the

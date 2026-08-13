@@ -18,9 +18,27 @@ public:
         QString version;      // normalised, e.g. "0.2.0"
         QString tag;          // as published, e.g. "v0.2.0"
         QString pageUrl;      // human-facing release page
-        QString installerUrl; // .exe asset, when the release has one
+        QString assetUrl;     // the asset for *this* platform, when there is one
+        QString assetName;
         QString notes;
     };
+
+    // What counts as the right download here. A release carries builds for
+    // every platform, so picking the first one attached would offer a Windows
+    // installer to a Linux user.
+    struct AssetPreference {
+        QStringList suffixes;    // ".deb", ".exe", ...
+        QStringList archTokens;  // "amd64", "x86_64", ...
+        QString     codename;    // "bookworm", when the system reports one
+    };
+
+    static AssetPreference currentPreference();
+
+    // Chooses among a release's assets. Kept separate from the platform
+    // detection above so the rules can be tested for every platform at once.
+    static QString chooseAsset(const QVector<QPair<QString, QString>> &nameAndUrl,
+                               const AssetPreference &preference,
+                               QString *chosenName = nullptr);
 
     explicit UpdateChecker(QObject *parent = nullptr);
 

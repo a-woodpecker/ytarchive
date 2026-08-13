@@ -5,7 +5,10 @@
 #include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QFile>
 #include <QNetworkRequest>
+#include <QSysInfo>
+#include <functional>
 #include <QCoreApplication>
 #include <QRegularExpression>
 
@@ -67,6 +70,99 @@ int UpdateChecker::compareVersions(const QString &a, const QString &b)
     return QString::compare(sa, sb);
 }
 
+UpdateChecker::AssetPreference UpdateChecker::currentPreference()
+{
+    AssetPreference preference;
+
+#if defined(Q_OS_WIN)
+    preference.suffixes = { QStringLiteral(".exe"), QStringLiteral(".msi") };
+#elif defined(Q_OS_MACOS)
+    preference.suffixes = { QStringLiteral(".dmg"), QStringLiteral(".pkg") };
+#else
+    preference.suffixes = { QStringLiteral(".deb"), QStringLiteral(".appimage"),
+                            QStringLiteral(".rpm") };
+#endif
+
+    const QString arch = QSysInfo::currentCpuArchitecture();
+    if (arch == QLatin1String("x86_64")) {
+        preference.archTokens = { QStringLiteral("amd64"), QStringLiteral("x86_64"),
+                                  QStringLiteral("x64") };
+    } else if (arch == QLatin1String("arm64")) {
+        preference.archTokens = { QStringLiteral("arm64"), QStringLiteral("aarch64") };
+    } else if (!arch.isEmpty()) {
+        preference.archTokens = { arch };
+    }
+
+#if defined(Q_OS_LINUX)
+    // Packages are tagged with the distribution they were built on, so prefer
+    // one built for this system when the release offers several.
+    QFile osRelease(QStringLiteral("/etc/os-release"));
+    if (osRelease.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        const QStringList lines = QString::fromUtf8(osRelease.readAll())
+                                      .split(QChar('\n'), Qt::SkipEmptyParts);
+        for (const QString &line : lines) {
+            if (!line.startsWith(QStringLiteral("VERSION_CODENAME=")))
+                continue;
+            preference.codename = line.section(QChar('='), 1).remove(QChar('"')).trimmed();
+            break;
+        }
+    }
+#endif
+
+    return preference;
+}
+
+QString UpdateChecker::chooseAsset(const QVector<QPair<QString, QString>> &nameAndUrl,
+                                   const AssetPreference &preference,
+                                   QString *chosenName)
+{
+    auto matchesSuffix = [&preference](const QString &name) {
+        for (const QString &suffix : preference.suffixes)
+            if (name.endsWith(suffix, Qt::CaseInsensitive))
+                return true;
+        return false;
+    };
+
+    QVector<QPair<QString, QString>> candidates;
+    for (const auto &asset : nameAndUrl) {
+        if (!asset.first.isEmpty() && !asset.second.isEmpty() && matchesSuffix(asset.first))
+            candidates.append(asset);
+    }
+    if (candidates.isEmpty())
+        return QString();   // nothing for this platform; the caller falls back
+
+    auto narrow = [&candidates](const std::function<bool(const QString &)> &keep) {
+        QVector<QPair<QString, QString>> kept;
+        for (const auto &asset : candidates)
+            if (keep(asset.first))
+                kept.append(asset);
+        // Only narrow when something survives: a release that does not name
+        // architectures at all should still offer its single build.
+        if (!kept.isEmpty())
+            candidates = kept;
+    };
+
+    if (!preference.archTokens.isEmpty()) {
+        narrow([&preference](const QString &name) {
+            for (const QString &token : preference.archTokens)
+                if (name.contains(token, Qt::CaseInsensitive))
+                    return true;
+            return false;
+        });
+    }
+
+    if (!preference.codename.isEmpty()) {
+        const QString codename = preference.codename;
+        narrow([&codename](const QString &name) {
+            return name.contains(codename, Qt::CaseInsensitive);
+        });
+    }
+
+    if (chosenName)
+        *chosenName = candidates.first().first;
+    return candidates.first().second;
+}
+
 QString UpdateChecker::apiBase()
 {
     const QString override = qEnvironmentVariable("YTA_UPDATE_API_BASE");
@@ -108,16 +204,14 @@ bool UpdateChecker::parseLatestRelease(const QByteArray &json, Release *release,
         return false;
     }
 
+    QVector<QPair<QString, QString>> candidates;
     const QJsonArray assets = root.value(QStringLiteral("assets")).toArray();
     for (const QJsonValue &value : assets) {
         const QJsonObject asset = value.toObject();
-        const QString name = asset.value(QStringLiteral("name")).toString();
-        if (name.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive)) {
-            release->installerUrl =
-                asset.value(QStringLiteral("browser_download_url")).toString();
-            break;
-        }
+        candidates.append({ asset.value(QStringLiteral("name")).toString(),
+                            asset.value(QStringLiteral("browser_download_url")).toString() });
     }
+    release->assetUrl = chooseAsset(candidates, currentPreference(), &release->assetName);
     return true;
 }
 

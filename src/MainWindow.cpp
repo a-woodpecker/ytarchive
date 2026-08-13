@@ -34,6 +34,7 @@
 #include <QPushButton>
 #include <QScrollBar>
 #include <QSettings>
+#include <QSysInfo>
 #include <QStandardPaths>
 #include <QStatusBar>
 #include <QTimer>
@@ -1115,13 +1116,25 @@ void MainWindow::onUpdateAvailable(const UpdateChecker::Release &release, bool u
     m_updateLabel->setText(tr("Version %1 is available. You have %2.")
                                .arg(release.version, QStringLiteral(YTA_VERSION)));
 
-    const QString target = release.installerUrl.isEmpty() ? release.pageUrl
-                                                          : release.installerUrl;
+    // "Download update" rather than "Download installer": on Linux the asset is
+    // a package, and naming it after the Windows artefact was how a Debian
+    // machine ended up being offered a .exe.
+    const bool haveAsset = !release.assetUrl.isEmpty();
+    const QString target = haveAsset ? release.assetUrl : release.pageUrl;
 
-    auto *download = new QPushButton(release.installerUrl.isEmpty()
-                                         ? tr("View release")
-                                         : tr("Download installer"), m_updateBanner);
+    auto *download = new QPushButton(haveAsset ? tr("Download update")
+                                               : tr("View release"), m_updateBanner);
     download->setObjectName(QStringLiteral("primaryButton"));
+    if (haveAsset) {
+        download->setToolTip(release.assetName.endsWith(QStringLiteral(".deb"))
+                                 ? tr("Downloads %1. Install it with:\n"
+                                      "    sudo apt install ./%1").arg(release.assetName)
+                                 : tr("Downloads %1.").arg(release.assetName));
+    } else {
+        download->setToolTip(
+            tr("This release has no build for %1. The release page lists everything "
+               "that was published.").arg(QSysInfo::prettyProductName()));
+    }
     connect(download, &QPushButton::clicked, this, [target] {
         QDesktopServices::openUrl(QUrl(target));
     });
