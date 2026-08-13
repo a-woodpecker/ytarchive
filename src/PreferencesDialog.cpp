@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QStandardItemModel>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QFileDialog>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -298,15 +299,41 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
         else
             m_cookiesBrowser->setCurrentText(current.cookiesFromBrowser);
     }
-    accessForm->addRow(tr("Use cookies from browser"), m_cookiesBrowser);
+    // Firefox forks - LibreWolf, Floorp, Zen - are not names yt-dlp accepts, but
+    // it will read any Firefox-shaped profile given a path. This button spares
+    // people from having to know that.
+    auto *cookieRow = new QWidget(this);
+    auto *cookieLayout = new QHBoxLayout(cookieRow);
+    cookieLayout->setContentsMargins(0, 0, 0, 0);
+    cookieLayout->addWidget(m_cookiesBrowser, 1);
+
+    auto *browseProfile = new QPushButton(tr("Profile folder…"), cookieRow);
+    browseProfile->setToolTip(
+        tr("For a Firefox derivative such as LibreWolf: open about:profiles in it, "
+           "copy the Root Directory, and choose that folder here."));
+    connect(browseProfile, &QPushButton::clicked, this, [this] {
+        const QString dir = QFileDialog::getExistingDirectory(
+            this, tr("Select the browser profile folder"),
+            QDir::homePath());
+        if (dir.isEmpty())
+            return;
+        // yt-dlp reads any Firefox-format profile when told it is "firefox".
+        m_cookiesBrowser->setCurrentText(QStringLiteral("firefox:") + dir);
+    });
+    cookieLayout->addWidget(browseProfile);
+
+    accessForm->addRow(tr("Use cookies from browser"), cookieRow);
 
     auto *cookiesNote = new QLabel(
         tr("Pick the browser you are signed in to. Cookies are read from its profile "
-           "each time, so nothing is stored here and nothing needs exporting. For a "
-           "named profile, type it as <tt>firefox:profilename</tt>.<br><br>"
-           "Close the browser first: some keep their cookie database locked while "
-           "running. Set this only when you need it - passing cookies can make some "
-           "formats unavailable, and ties your downloads to your account."), this);
+           "each time, so nothing is stored here and nothing needs exporting.<br><br>"
+           "Firefox derivatives such as LibreWolf, Floorp and Zen are not in the list "
+           "because yt-dlp does not know them by name. Use <b>Profile folder</b> "
+           "instead: their cookie databases are in Firefox format and are read the "
+           "same way.<br><br>"
+           "Close the browser first - some keep the cookie database locked. Set this "
+           "only when you need it: passing cookies can make some formats unavailable, "
+           "and ties your downloads to your account."), this);
     cookiesNote->setWordWrap(true);
     cookiesNote->setObjectName(QStringLiteral("hint"));
     accessForm->addRow(QString(), cookiesNote);

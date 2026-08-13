@@ -483,6 +483,7 @@ canvas, so a light version would vanish against pale thumbnails.
 | `DownloadManager.*` | bounded concurrent queue, progress parsing, timestamp stamping |
 | `VideoModel.*` | list model plus search/state filter proxy |
 | `VideoCardDelegate.*` | the painted video card |
+| `VideoGridView.*` | the grid: seam-free scrolling and a sane wheel step |
 | `DownloadsPanel.*` | transfer queue view |
 | `ThumbnailCache.*` | memory and disk thumbnail cache, deduplicated fetches |
 | `UpdateChecker.*` | GitHub Releases polling and version comparison |
@@ -537,26 +538,81 @@ sessions, so a panel resized once stays that way.
 
 Downloads and Output are tabbed together at the bottom; click a tab to switch.
 
+### Scrolling the grid
+
+One wheel notch moves half a row of cards. Qt's own figure for a pixel-scrolled
+icon view works out at roughly one item per scroll line, so with the usual three
+lines per notch a single click jumped nearly three rows - a dozen videos at
+once. The distance is `wheelScrollLines` from the system multiplied by 45
+pixels, so the platform preference still applies. Touchpads are passed through
+unchanged, since they already report real pixels.
+
 ## Age-restricted and members-only videos
 
-Some videos need an account. **Preferences > Access > Use cookies from browser**
-takes the browser you are signed in to; yt-dlp reads its cookie database
-directly, so nothing is exported and nothing is stored by this application.
-For a named profile, type `firefox:profilename`.
-
-Close the browser first - several keep their cookie database locked while
-running.
+These need an account. **Preferences > Access > Use cookies from browser** names
+the browser you are signed in to; yt-dlp reads its cookie database directly, so
+nothing is exported and nothing is stored by this application.
 
 Then use **Retry failed** on the videos that were refused. Age and membership
-failures are never retried automatically, because retrying cannot fix them
-until this setting changes.
+failures are never retried automatically, because retrying cannot help until
+this setting changes.
 
-Set it only when needed. Passing cookies can make some formats *unavailable*,
-and it ties every download to your account.
+### Browsers yt-dlp knows by name
 
-Error messages shown on cards and in the queue are rewritten to name the
-setting in this program rather than the yt-dlp command-line flag they
-originally referred to. The unmodified text stays in the Output tab.
+Pick one from the list: `brave`, `chrome`, `chromium`, `edge`, `firefox`,
+`opera`, `safari`, `vivaldi`, `whale`.
+
+For a non-default profile, add its name: `firefox:work` or `chrome:Profile 2`.
+
+| Browser | Notes |
+|---|---|
+| Firefox | Cookies are plain SQLite; the most reliable option on Linux |
+| Chrome, Chromium, Brave, Edge, Vivaldi, Opera | Encrypted; on Linux yt-dlp needs access to your keyring, and may prompt |
+| Safari | macOS only; grant Full Disk Access to whatever runs yt-dlp |
+
+### LibreWolf, Floorp, Zen and other Firefox forks
+
+These are **not** valid names - yt-dlp rejects anything outside the list above.
+Their profiles are Firefox-format though, so pointing yt-dlp at the folder works:
+
+1. In LibreWolf, open `about:profiles`.
+2. Copy the **Root Directory** of the profile you are signed in with, typically
+   `/home/you/.librewolf/xxxxxxxx.default-default`. A Flatpak install keeps it
+   under `~/.var/app/io.gitlab.librewolf-community/.librewolf/` instead.
+3. In Preferences > Access, click **Profile folder** and select it. The field
+   fills in as `firefox:/home/you/.librewolf/xxxxxxxx.default-default`.
+
+Or type it by hand - the field is editable.
+
+**LibreWolf clears cookies on close by default.** If sign-in never survives,
+that is why: check *Settings > Privacy & Security > Cookies and Site Data*, and
+either turn the setting off or add an exception for the video service. Sign in
+again afterwards, since existing cookies were already discarded.
+
+### Checking it worked
+
+Close the browser first - some hold the cookie database open. Then turn on
+**Preferences > Downloading > Verbose yt-dlp output** and retry one
+age-restricted video. The Output tab shows the flag being passed:
+
+```
+$ /home/you/.local/bin/yt-dlp ... --cookies-from-browser firefox:/home/you/.librewolf/xxxx.default-default ...
+```
+
+If the download still fails with the same message, the cookies were read but
+did not carry a signed-in session: sign in again in that exact profile, confirm
+the video plays there, close the browser, and retry.
+
+### Worth knowing
+
+- Cookies are read fresh on every download, so nothing goes stale in this
+  program's settings - but the session itself expires after a couple of weeks
+  of not using the browser.
+- Passing cookies can make some formats *unavailable*, so leave this off unless
+  a video needs it.
+- Everything downloaded this way is tied to your account. For an archive meant
+  to outlive the account, that is worth thinking about before enabling it
+  globally.
 
 ## If downloads fail with HTTP 403
 

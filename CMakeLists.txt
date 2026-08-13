@@ -28,6 +28,7 @@ qt_add_executable(ytarchive
     src/ThumbnailCache.h      src/ThumbnailCache.cpp
     src/VideoModel.h          src/VideoModel.cpp
     src/VideoCardDelegate.h   src/VideoCardDelegate.cpp
+    src/VideoGridView.h       src/VideoGridView.cpp
     src/DownloadsPanel.h      src/DownloadsPanel.cpp
     src/PreferencesDialog.h   src/PreferencesDialog.cpp
     src/SetupDialog.h         src/SetupDialog.cpp

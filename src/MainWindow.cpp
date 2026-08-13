@@ -6,6 +6,7 @@
 #include "Theme.h"
 #include "ThumbnailCache.h"
 #include "VideoCardDelegate.h"
+#include "VideoGridView.h"
 #include "VideoDetailsDialog.h"
 #include "VideoModel.h"
 #include "YtDlp.h"
@@ -44,23 +45,6 @@
 
 namespace {
 constexpr qint64 kAllChannels = -1;
-
-// QListView scrolls by blitting the pixels it already has and repainting only
-// the strip that just became visible. Any row erased but left outside that
-// strip survives as a hairline across the grid. Repainting the whole viewport
-// costs nothing at this item count and removes the entire class of artefact.
-class SeamlessListView : public QListView
-{
-public:
-    using QListView::QListView;
-
-protected:
-    void scrollContentsBy(int dx, int dy) override
-    {
-        QListView::scrollContentsBy(dx, dy);
-        viewport()->update();
-    }
-};
 } // namespace
 
 MainWindow::MainWindow(QWidget *parent)
@@ -425,7 +409,7 @@ void MainWindow::buildUi()
     centralLayout->addWidget(bar);
 
     // Video grid
-    m_grid = new SeamlessListView(central);
+    m_grid = new VideoGridView(central);
     m_grid->setObjectName(QStringLiteral("videoGrid"));
     m_grid->setModel(m_proxy);
     m_grid->setItemDelegate(new VideoCardDelegate(m_grid));
