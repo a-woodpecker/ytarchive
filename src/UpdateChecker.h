@@ -37,6 +37,18 @@ public:
     // counts; a pre-release suffix sorts below the same version without one.
     static int compareVersions(const QString &a, const QString &b);
 
+    // Interprets a GitHub "releases/latest" payload. Separated from the network
+    // call so the decisions it makes - which asset counts, whether a draft is
+    // ignored - can be tested directly against real response shapes.
+    // Returns false and sets `error` on malformed input; sets `ignored` when
+    // the release exists but should not be offered.
+    static bool parseLatestRelease(const QByteArray &json, Release *release,
+                                   bool *ignored, QString *error);
+
+    // Base URL of the API, "https://api.github.com" unless YTA_UPDATE_API_BASE
+    // is set. Overridable for testing and for GitHub Enterprise hosts.
+    static QString apiBase();
+
 signals:
     void updateAvailable(const UpdateChecker::Release &release, bool userInitiated);
     void upToDate(bool userInitiated);

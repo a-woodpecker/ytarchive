@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Builds YT Archive and packages it into a Windows installer.
 
@@ -15,6 +15,9 @@ param(
     [string]$QtDir      = "C:\Qt\6.11.1\msvc2022_64",
     [string]$Version    = "",
     [string]$Preset     = "windows-vs2026",
+    # Bypasses CMakePresets.json entirely. CI passes this because the presets
+    # hardcode a local Qt path that will not exist on a build runner.
+    [string]$Generator  = "",
     [string]$GitHubRepo = "a-woodpecker/ytarchive",
     [string]$Iscc       = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
 )
@@ -37,7 +40,14 @@ if (-not (Test-Path $QtDir))  { throw "Qt not found at $QtDir. Pass -QtDir." }
 if (-not (Test-Path $Iscc))   { throw "Inno Setup not found at $Iscc. Install it, or pass -Iscc." }
 
 # --- configure and build -------------------------------------------------
-$cmakeArgs = @("--preset", $Preset, "-DCMAKE_PREFIX_PATH=$QtDir")
+if ($Generator) {
+    $buildDir = Join-Path $root "build\installer"
+    $cmakeArgs = @("-S", $root, "-B", $buildDir, "-G", $Generator, "-A", "x64",
+                   "-DCMAKE_PREFIX_PATH=$QtDir")
+} else {
+    $buildDir = Join-Path $root "build\$Preset"
+    $cmakeArgs = @("--preset", $Preset, "-DCMAKE_PREFIX_PATH=$QtDir")
+}
 if ($GitHubRepo) { $cmakeArgs += "-DYTA_GITHUB_REPO=$GitHubRepo" }
 
 Push-Location $root
@@ -45,13 +55,17 @@ try {
     & cmake @cmakeArgs
     if ($LASTEXITCODE) { throw "CMake configure failed." }
 
-    & cmake --build --preset $Preset
+    if ($Generator) {
+        & cmake --build $buildDir --config Release
+    } else {
+        & cmake --build --preset $Preset
+    }
     if ($LASTEXITCODE) { throw "Build failed." }
 }
 finally { Pop-Location }
 
 # Multi-config generators nest the binary one level deeper than Ninja does.
-$exe = Get-ChildItem -Path (Join-Path $root "build\$Preset") -Filter "ytarchive.exe" `
+$exe = Get-ChildItem -Path $buildDir -Filter "ytarchive.exe" `
                      -Recurse -File | Select-Object -First 1
 if (-not $exe) { throw "ytarchive.exe was not produced." }
 Write-Host "  built: $($exe.FullName)"

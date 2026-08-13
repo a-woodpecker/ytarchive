@@ -393,9 +393,30 @@ that the repository has no releases - the expected response to GitHub's 404.
 binary underneath a program whose job is not losing data is a poor trade, so the
 update path always ends at a link you click.
 
-To publish: bump `VERSION` in `CMakeLists.txt`, run the packaging script, and
-attach the `.exe` to a release tagged `v<version>`. Version comparison is
-numeric and tolerates a leading `v`, so `1.10.0` correctly beats `1.9.0`.
+To publish: bump `VERSION` in `CMakeLists.txt`, commit, then push a tag
+`v<version>`. The release workflow builds both platforms and attaches the
+Windows installer and the `.deb`. It **refuses to run if the tag and
+`CMakeLists.txt` disagree**, because a mismatch would tell every user an update
+is permanently available, or never mention one at all.
+
+Version comparison is numeric and tolerates a leading `v`, so `1.10.0`
+correctly beats `1.9.0`.
+
+Setting `YTA_UPDATE_API_BASE` overrides the API host. It exists for testing
+against a mock server, and works for a GitHub Enterprise host too.
+
+## Continuous integration
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `.github/workflows/build.yml` | push, pull request | Builds on Ubuntu and Windows, smoke-tests the binary, builds and installs the `.deb` |
+| `.github/workflows/release.yml` | tag `v*` | Verifies the tag, builds the installer and package, publishes a release with both attached |
+
+The Linux smoke test launches the binary with Qt's offscreen platform and
+checks it is still running several seconds later - the application is a GUI
+with no `--version` flag, so "it starts and stays up" is the meaningful signal.
+The release job also installs the `.deb` and removes it again, so a broken
+dependency list fails the build rather than a user's machine.
 
 ## Themes
 

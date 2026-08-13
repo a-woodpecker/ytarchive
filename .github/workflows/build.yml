@@ -1,0 +1,98 @@
+name: Build
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Linux (Qt from apt)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qt6-base-dev libqt6sql6-sqlite qt6-wayland \
+            cmake ninja-build g++ dpkg-dev
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      # The binary is a GUI application with no --version flag, so "it starts
+      # and stays up" is the meaningful check. Qt's offscreen platform needs no
+      # display server.
+      - name: Smoke test
+        run: |
+          export QT_QPA_PLATFORM=offscreen
+          ./build/ytarchive &
+          pid=$!
+          sleep 8
+          if kill -0 "$pid" 2>/dev/null; then
+            echo "started and still running"
+            kill "$pid"
+          else
+            echo "::error::the application exited on its own"
+            exit 1
+          fi
+
+      - name: Build the Debian package
+        run: |
+          chmod +x packaging/build-deb.sh
+          ./packaging/build-deb.sh
+
+      - name: Verify the package installs
+        run: |
+          sudo apt-get install -y ./packaging/dist/*.deb
+          test -x /usr/bin/ytarchive
+          test -f /usr/share/applications/ytarchive.desktop
+          sudo apt-get remove -y ytarchive
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: packaging/dist/*.deb
+          if-no-files-found: error
+
+  windows:
+    name: Windows (MSVC)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.1'
+          arch: 'win64_msvc2022_64'
+          cache: true
+
+      # The Visual Studio generator finds its own toolchain, so no developer
+      # command prompt setup is needed.
+      - name: Configure
+        run: >
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+          -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Check the binary was produced
+        run: |
+          if (-not (Test-Path build\Release\ytarchive.exe)) {
+            Write-Error "ytarchive.exe was not produced"
+          }
+          Write-Host "built: $((Get-Item build\Release\ytarchive.exe).Length) bytes"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: build/Release/ytarchive.exe
+          if-no-files-found: error

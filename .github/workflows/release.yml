@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build, e.g. v0.1.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  # The in-app update check compares the release tag against the version
+  # compiled into the binary. If they disagree, every user is told an update is
+  # available forever, or never told at all. Fail here rather than ship that.
+  check-version:
+    name: Tag matches CMakeLists.txt
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          [ -n "${{ github.event.inputs.tag }}" ] && tag="${{ github.event.inputs.tag }}"
+          tag_version="${tag#v}"
+          project_version="$(sed -n 's/^project(YtArchive VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)"
+
+          echo "tag:     $tag_version"
+          echo "project: $project_version"
+
+          if [ "$tag_version" != "$project_version" ]; then
+            echo "::error::Tag $tag does not match project(YtArchive VERSION $project_version) in CMakeLists.txt"
+            exit 1
+          fi
+          echo "version=$project_version" >> "$GITHUB_OUTPUT"
+
+  linux:
+    name: Debian package
+    needs: check-version
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qt6-base-dev libqt6sql6-sqlite qt6-wayland \
+            cmake ninja-build g++ dpkg-dev
+
+      - name: Build the package
+        run: |
+          chmod +x packaging/build-deb.sh
+          ./packaging/build-deb.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: packaging/dist/*.deb
+          if-no-files-found: error
+
+  windows:
+    name: Windows installer
+    needs: check-version
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.1'
+          arch: 'win64_msvc2022_64'
+          cache: true
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      # -Generator bypasses CMakePresets.json, whose Qt path is a local one.
+      - name: Build the installer
+        run: >
+          .\packaging\build-installer.ps1
+          -QtDir "$env:QT_ROOT_DIR"
+          -Generator "Visual Studio 17 2022"
+          -GitHubRepo "${{ github.repository }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: packaging/dist/*.exe
+          if-no-files-found: error
+
+  release:
+    name: Publish
+    needs: [ check-version, linux, windows ]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List what will be attached
+        run: find artifacts -type f -printf '%p  %s bytes\n'
+
+      # The update check looks for an .exe asset and falls back to the release
+      # page, so the installer must be attached for it to offer a direct
+      # download. Not a draft and not a prerelease: both are ignored by it.
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: YT Archive ${{ needs.check-version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/installer/*.exe
+            artifacts/deb/*.deb
