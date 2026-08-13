@@ -36,7 +36,7 @@ qt_add_executable(ytarchive
 
 qt_add_resources(ytarchive "appresources"
     PREFIX "/"
-    FILES resources/style.qss resources/style-light.qss
+    FILES resources/style.qss resources/style-light.qss resources/ytarchive.png
 )
 
 # The sources are UTF-8 and contain characters like the middle dot used as a
@@ -61,3 +61,14 @@ install(TARGETS ytarchive
     BUNDLE  DESTINATION .
     RUNTIME DESTINATION bin
 )
+
+# Desktop integration. Only meaningful on a freedesktop system, so not
+# installed on Windows or macOS.
+if(UNIX AND NOT APPLE)
+    install(FILES resources/ytarchive.desktop
+            DESTINATION share/applications)
+    install(FILES resources/ytarchive.svg
+            DESTINATION share/icons/hicolor/scalable/apps)
+    install(FILES resources/ytarchive.png
+            DESTINATION share/icons/hicolor/256x256/apps)
+endif()

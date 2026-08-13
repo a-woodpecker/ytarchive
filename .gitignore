@@ -366,3 +366,7 @@ build/
 tools/
 packaging/dist/
 packaging/staging/
+packaging/stage/
+staging/
+dist/
+stage/

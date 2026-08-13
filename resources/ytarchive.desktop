@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=YT Archive
+GenericName=Video Archiver
+Comment=Archive video channels for preservation
+Exec=ytarchive
+Icon=ytarchive
+Terminal=false
+Categories=AudioVideo;Video;Network;
+Keywords=video;download;archive;channel;preservation;
+StartupNotify=true
+StartupWMClass=ytarchive

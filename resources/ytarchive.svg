@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <rect width="256" height="256" rx="56" fill="#141414"/>
+  <!-- Archive box: a lid above a body, with a play mark punched out of it. -->
+  <rect x="44" y="58" width="168" height="42" rx="12" fill="#cc0000"/>
+  <path d="M58 112 h140 v70 a24 24 0 0 1 -24 24 H82 a24 24 0 0 1 -24 -24 z"
+        fill="#cc0000" opacity="0.82"/>
+  <path d="M110 130 l44 26 -44 26 z" fill="#ffffff"/>
+  <rect x="104" y="72" width="48" height="14" rx="7" fill="#141414" opacity="0.55"/>
+</svg>

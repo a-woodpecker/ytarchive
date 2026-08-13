@@ -117,6 +117,53 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
+### Building a Debian package
+
+`packaging/build-deb.sh` produces an installable `.deb`:
+
+```bash
+chmod +x packaging/build-deb.sh
+./packaging/build-deb.sh --install       # or omit --install to just build it
+```
+
+The package lands in `packaging/dist/` and installs:
+
+```
+/usr/bin/ytarchive
+/usr/share/applications/ytarchive.desktop
+/usr/share/icons/hicolor/scalable/apps/ytarchive.svg
+/usr/share/icons/hicolor/256x256/apps/ytarchive.png
+```
+
+so it appears in the Plasma application launcher with an icon.
+
+Library dependencies are computed with `dpkg-shlibdeps` rather than written by
+hand, because Qt's package names differ across distributions - Ubuntu carries a
+`t64` suffix after the 64-bit time_t transition, Debian does not. A hardcoded
+list would install on one and fail on the other.
+
+Two dependencies are added manually, since they are loaded at runtime and leave
+no reference in the binary for `dpkg-shlibdeps` to find:
+
+- `libqt6sql6-sqlite` - the catalog cannot open without it
+- `ffmpeg` - merges the separate video and audio streams
+
+**yt-dlp is `Suggests`, not `Recommends`, on purpose.** apt installs
+recommendations by default, and the packaged yt-dlp lags badly - a test install
+here pulled a version more than two years old, which would fail against the
+service immediately and look like a fault in this program. Install a current
+one yourself:
+
+```bash
+sudo apt install pipx && pipx install yt-dlp
+```
+
+`~/.local/bin` normally precedes `/usr/bin`, so a pipx copy wins even if the
+packaged one is present. Preferences can also point at a specific binary.
+
+Uninstall with `sudo apt remove ytarchive`. Your archive folder and catalog are
+outside the package and are never touched.
+
 ### Wayland notes
 
 On KDE Plasma under Wayland the app runs natively once `qt6-wayland` is
@@ -464,7 +511,8 @@ comparison is numeric and tolerates a leading `v`, so `1.10.0` correctly beats
 | `ThumbnailCache.*` | memory + disk thumbnail cache, deduplicated fetches |
 | `UpdateChecker.*` | GitHub Releases polling and version comparison |
 | `MainWindow.*` | layout and wiring |
-| `packaging/` | Inno Setup script, Windows and Linux build scripts |
+| `packaging/` | Inno Setup script, Windows/Linux build scripts, .deb packaging |
+| `resources/ytarchive.desktop`, `.svg`, `.png` | Linux desktop integration |
 | `Theme.*` | the two colour schemes, and everything the cards paint |
 | `resources/style.qss` | dark theme |
 | `resources/style-light.qss` | light theme |
