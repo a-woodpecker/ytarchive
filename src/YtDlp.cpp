@@ -32,6 +32,29 @@ void appendRuntimeArgs(QStringList &args, const Settings &s)
         args << QStringLiteral("--js-runtimes") << s.jsRuntimes.trimmed();
 }
 
+// User-supplied extractor arguments. yt-dlp accepts the flag repeatedly, so
+// this never conflicts with the ones the program sets itself.
+void appendExtractorArgs(QStringList &args, const Settings &s)
+{
+    const QString extra = s.extractorArgs.trimmed();
+    if (!extra.isEmpty())
+        args << QStringLiteral("--extractor-args") << extra;
+}
+
+// Slowing down is the only lever against IP-based rate limiting.
+void appendPacingArgs(QStringList &args, const Settings &s)
+{
+    if (s.sleepRequests > 0)
+        args << QStringLiteral("--sleep-requests") << QString::number(s.sleepRequests);
+    if (s.sleepInterval > 0) {
+        args << QStringLiteral("--sleep-interval") << QString::number(s.sleepInterval);
+        if (s.maxSleepInterval > s.sleepInterval) {
+            args << QStringLiteral("--max-sleep-interval")
+                 << QString::number(s.maxSleepInterval);
+        }
+    }
+}
+
 void appendAuthArgs(QStringList &args, const Settings &s)
 {
     if (!s.cookiesFromBrowser.isEmpty())
@@ -71,6 +94,7 @@ QStringList channelProbeArgs(const QString &channelUrl, const Settings &settings
 {
     QStringList args = baseArgs();
     appendRuntimeArgs(args, settings);
+    appendExtractorArgs(args, settings);
     args << QStringLiteral("--flat-playlist")
          << QStringLiteral("--playlist-items") << QStringLiteral("0")  // header only
          << QStringLiteral("--dump-single-json")
@@ -82,6 +106,8 @@ QStringList channelListArgs(const QString &channelUrl, const Settings &settings)
 {
     QStringList args = baseArgs();
     appendRuntimeArgs(args, settings);
+    appendExtractorArgs(args, settings);
+    appendPacingArgs(args, settings);
     args << QStringLiteral("--flat-playlist")
          // One JSON object per line, flushed as each video is found. The
          // single-document form would withhold everything until the end.
@@ -134,7 +160,12 @@ QStringList downloadArgs(const VideoInfo &video,
     if (settings.embedMetadata)    args << QStringLiteral("--embed-metadata");
     if (settings.embedChapters)    args << QStringLiteral("--embed-chapters");
 
+    args << QStringLiteral("--extractor-retries")
+         << QString::number(qMax(0, settings.extractorRetries));
+
     appendRuntimeArgs(args, settings);
+    appendExtractorArgs(args, settings);
+    appendPacingArgs(args, settings);
     appendAuthArgs(args, settings);
 
     // Output layout: finished files in the channel folder, partial files in a

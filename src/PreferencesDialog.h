@@ -35,6 +35,11 @@ private:
     QSpinBox  *m_concurrency;
     QSpinBox  *m_rateLimit;
     QSpinBox  *m_retries;
+    QSpinBox  *m_extractorRetries;
+    QSpinBox  *m_sleepRequests;
+    QSpinBox  *m_sleepInterval;
+    QSpinBox  *m_maxSleepInterval;
+    QLineEdit *m_extractorArgs;
     QCheckBox *m_infoJson;
     QCheckBox *m_thumbnail;
     QCheckBox *m_descriptionFile;

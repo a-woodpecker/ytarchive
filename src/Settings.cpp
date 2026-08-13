@@ -43,6 +43,11 @@ Settings Settings::load()
     v.mergeContainer    = s.value("mergeContainer", v.mergeContainer).toString();
     v.rateLimitKiB      = s.value("rateLimitKiB", 0).toInt();
     v.retries           = s.value("retries", v.retries).toInt();
+    v.extractorRetries  = s.value("extractorRetries", v.extractorRetries).toInt();
+    v.sleepRequests     = s.value("sleepRequests", 0).toInt();
+    v.sleepInterval     = s.value("sleepInterval", 0).toInt();
+    v.maxSleepInterval  = s.value("maxSleepInterval", 0).toInt();
+    v.extractorArgs     = s.value("extractorArgs").toString();
     v.writeInfoJson     = s.value("writeInfoJson", true).toBool();
     v.writeThumbnail    = s.value("writeThumbnail", true).toBool();
     v.writeDescription  = s.value("writeDescription", true).toBool();
@@ -74,6 +79,11 @@ void Settings::save() const
     s.setValue("mergeContainer", mergeContainer);
     s.setValue("rateLimitKiB", rateLimitKiB);
     s.setValue("retries", retries);
+    s.setValue("extractorRetries", extractorRetries);
+    s.setValue("sleepRequests", sleepRequests);
+    s.setValue("sleepInterval", sleepInterval);
+    s.setValue("maxSleepInterval", maxSleepInterval);
+    s.setValue("extractorArgs", extractorArgs);
     s.setValue("writeInfoJson", writeInfoJson);
     s.setValue("writeThumbnail", writeThumbnail);
     s.setValue("writeDescription", writeDescription);

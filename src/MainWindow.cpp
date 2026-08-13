@@ -2,6 +2,7 @@
 
 #include "DownloadsPanel.h"
 #include "PreferencesDialog.h"
+#include "SetupDialog.h"
 #include "Theme.h"
 #include "ThumbnailCache.h"
 #include "VideoCardDelegate.h"
@@ -126,16 +127,20 @@ MainWindow::MainWindow(QWidget *parent)
                     m_forbiddenHintShown = true;
                     m_log->appendPlainText(tr(
                         "\nA 403 means the media URL was refused, not that the video is "
-                        "unavailable. In order of likelihood:\n"
-                        "  1. yt-dlp is out of date. Update it, and prefer the nightly "
-                        "channel: yt-dlp --update-to nightly\n"
-                        "  2. No JavaScript runtime is installed. Recent yt-dlp needs one "
-                        "(deno, node, bun or qjs) to sign media URLs. Install deno, or "
-                        "name another under Preferences > Locations.\n"
-                        "  3. Cookies are configured. They can make formats unavailable; "
-                        "try clearing them in Preferences > Access.\n"
-                        "  4. Rate limiting. Reduce simultaneous downloads to 1 and set a "
-                        "speed limit in Preferences > Downloading.\n"));
+                        "unavailable. Help > Check download support will test each "
+                        "external tool and say which is missing.\n"
+                        "In order of likelihood:\n"
+                        "  1. No JavaScript runtime, or a PO token is required. Check "
+                        "the top of this log: if a runtime was found, the next suspect "
+                        "is a missing PO token. Install a provider plugin, or pass one "
+                        "under Preferences > Downloading > Extractor arguments.\n"
+                        "  2. yt-dlp is out of date: yt-dlp --update-to nightly\n"
+                        "  3. Separate video and audio streams are more fragile than a "
+                        "combined one. Try the quality setting \"b\" in "
+                        "Preferences > Downloading.\n"
+                        "  4. Rate limiting, especially if the failure happens partway "
+                        "through. Reduce simultaneous downloads to 1 and set the pause "
+                        "options under Preferences > Downloading.\n"));
                 }
                 if (ok)
                     m_model->refreshVideo(m_db.video(pk));
@@ -508,6 +513,11 @@ void MainWindow::buildActions()
     viewMenu->addAction(tr("&Reset panel layout"), this, &MainWindow::resetLayout);
 
     QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
+    helpMenu->addAction(tr("Check &download support…"), this, [this] {
+        auto *dialog = new SetupDialog(m_settings, this);
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        dialog->show();
+    });
     helpMenu->addAction(tr("Check for &updates…"), this, &MainWindow::checkForUpdates);
     helpMenu->addSeparator();
     helpMenu->addAction(tr("&About"), this, [this] {

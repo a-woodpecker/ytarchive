@@ -21,6 +21,18 @@ struct Settings {
     QString mergeContainer = QStringLiteral("mkv");
     int     rateLimitKiB = 0;       // 0 = unlimited
     int     retries = 10;
+    int     extractorRetries = 3;
+
+    // Rate limiting defences. All default to off, because they slow every
+    // download and are only worth paying for when the service pushes back.
+    int     sleepRequests = 0;      // seconds between metadata requests
+    int     sleepInterval = 0;      // minimum seconds between videos
+    int     maxSleepInterval = 0;   // upper bound; randomised within the range
+
+    // Free-text --extractor-args, e.g. a GVS PO token or a client override.
+    // Deliberately not a fixed set of options: what the service demands here
+    // changes far faster than this program is rebuilt.
+    QString extractorArgs;
 
     // Sidecar artefacts worth keeping for a preservation archive
     bool writeInfoJson  = true;

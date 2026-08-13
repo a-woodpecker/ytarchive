@@ -122,8 +122,13 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
         QStringLiteral("bv*+ba/b"),
         QStringLiteral("bv*[height<=1080]+ba/b[height<=1080]"),
         QStringLiteral("bv*[height<=720]+ba/b[height<=720]"),
-        QStringLiteral("bestvideo[vcodec^=avc1]+bestaudio[ext=m4a]/b")
+        QStringLiteral("bestvideo[vcodec^=avc1]+bestaudio[ext=m4a]/b"),
+        QStringLiteral("b")
     });
+    m_format->setToolTip(
+        tr("Selectors that combine separate video and audio streams give the best "
+           "quality but are more prone to HTTP 403. Plain \"b\" takes a single "
+           "pre-combined stream: lower quality, noticeably more reliable."));
     m_format->setCurrentText(current.formatSelector);
     downloadForm->addRow(tr("Quality (yt-dlp format selector)"), m_format);
 
@@ -148,6 +153,54 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
     m_retries->setRange(0, 100);
     m_retries->setValue(current.retries);
     downloadForm->addRow(tr("Retries per video"), m_retries);
+
+    m_extractorRetries = new QSpinBox(this);
+    m_extractorRetries->setRange(0, 50);
+    m_extractorRetries->setValue(current.extractorRetries);
+    m_extractorRetries->setToolTip(
+        tr("Retries of the metadata step, separate from retries of the transfer."));
+    downloadForm->addRow(tr("Extraction retries"), m_extractorRetries);
+
+    m_sleepRequests = new QSpinBox(this);
+    m_sleepRequests->setRange(0, 60);
+    m_sleepRequests->setSuffix(tr(" s"));
+    m_sleepRequests->setSpecialValueText(tr("None"));
+    m_sleepRequests->setValue(current.sleepRequests);
+    downloadForm->addRow(tr("Pause between requests"), m_sleepRequests);
+
+    m_sleepInterval = new QSpinBox(this);
+    m_sleepInterval->setRange(0, 600);
+    m_sleepInterval->setSuffix(tr(" s"));
+    m_sleepInterval->setSpecialValueText(tr("None"));
+    m_sleepInterval->setValue(current.sleepInterval);
+    downloadForm->addRow(tr("Pause between videos, minimum"), m_sleepInterval);
+
+    m_maxSleepInterval = new QSpinBox(this);
+    m_maxSleepInterval->setRange(0, 600);
+    m_maxSleepInterval->setSuffix(tr(" s"));
+    m_maxSleepInterval->setSpecialValueText(tr("Same as the minimum"));
+    m_maxSleepInterval->setValue(current.maxSleepInterval);
+    downloadForm->addRow(tr("Pause between videos, maximum"), m_maxSleepInterval);
+
+    auto *pacingNote = new QLabel(
+        tr("Pauses are the only defence against being rate limited by IP. They cost "
+           "time on every download, so leave them off until 403 errors appear."), this);
+    pacingNote->setWordWrap(true);
+    pacingNote->setObjectName(QStringLiteral("hint"));
+    downloadForm->addRow(QString(), pacingNote);
+
+    m_extractorArgs = new QLineEdit(current.extractorArgs, this);
+    m_extractorArgs->setPlaceholderText(
+        QStringLiteral("youtube:player_client=default,mweb"));
+    downloadForm->addRow(tr("Extractor arguments"), m_extractorArgs);
+
+    auto *extractorNote = new QLabel(
+        tr("Passed straight through as <tt>--extractor-args</tt>. Use it to supply a "
+           "PO token or select a different client when the service demands one; what "
+           "it wants changes faster than this program is rebuilt."), this);
+    extractorNote->setWordWrap(true);
+    extractorNote->setObjectName(QStringLiteral("hint"));
+    downloadForm->addRow(QString(), extractorNote);
 
     m_filenameTemplate = new QLineEdit(current.filenameTemplate, this);
     downloadForm->addRow(tr("Filename template"), m_filenameTemplate);
@@ -245,6 +298,11 @@ Settings PreferencesDialog::result() const
     s.maxConcurrent     = m_concurrency->value();
     s.rateLimitKiB      = m_rateLimit->value();
     s.retries           = m_retries->value();
+    s.extractorRetries  = m_extractorRetries->value();
+    s.sleepRequests     = m_sleepRequests->value();
+    s.sleepInterval     = m_sleepInterval->value();
+    s.maxSleepInterval  = m_maxSleepInterval->value();
+    s.extractorArgs     = m_extractorArgs->text().trimmed();
     s.filenameTemplate  = m_filenameTemplate->text().trimmed();
     s.writeInfoJson     = m_infoJson->isChecked();
     s.writeThumbnail    = m_thumbnail->isChecked();

@@ -361,7 +361,7 @@ own build.
 | Distribution | Qt | Status |
 |---|---|---|
 | Debian 12 bookworm | 6.4 | works; the reference build target |
-| Debian 13 trixie | 6.8 | works |
+| Debian 13 trixie | 6.8 | works, verified |
 | Ubuntu 24.04 noble | 6.4 | works, verified |
 | Ubuntu 22.04 jammy | 6.2 | **too old**, below the 6.3 minimum |
 
@@ -481,6 +481,8 @@ canvas, so a light version would vanish against pale thumbnails.
 | `packaging/` | Inno Setup script, build scripts, `.deb` packaging |
 | `tools/verify-tree.ps1` | checks the repository layout against git |
 | `tools/check-audio.sh` | decodes archived files to find corrupt or truncated audio |
+| `tools/test-403.sh` | tries a failing video several ways to isolate the cause of a 403 |
+| `SetupDialog.*` | checks the external tools and reports what is missing |
 
 ## Behaviour worth knowing
 
@@ -524,29 +526,93 @@ Downloads and Output are tabbed together at the bottom; click a tab to switch.
 
 A 403 means the media URL was refused. It does **not** mean the video is
 unavailable - the listing worked, so the service is reachable and the video
-exists. In rough order of likelihood:
+exists. The first 403 of a session writes this list to the Output tab.
 
-1. **No JavaScript runtime.** Check with
-   `yt-dlp -v "<any video URL>" 2>&1 | grep -i "JS runtimes"`. If it reports
-   `none`, that is the cause: install deno, or name another runtime in
-   Preferences. Updating yt-dlp does not help, because the runtime is a
-   separate program. Note that this command tests your *shell's* environment;
-   the Output tab reports what the application itself can see, which is the
-   one that matters.
-2. **yt-dlp is out of date.** The other common cause. The service changes
-   how it signs media URLs specifically to break automated downloaders, and
-   distribution packages lag badly. `yt-dlp --update-to nightly`, or
-   `pipx upgrade yt-dlp`. The application reports the version and its age in the
-   Output tab at startup and warns when it is more than a month old.
-3. **Cookies.** Counter-intuitively, passing cookies can make formats
-   *unavailable*. If nothing you archive needs an account, clear both cookie
-   fields under Preferences > Access.
-4. **Rate limiting.** Real, but usually secondary. If 403s appear only after a
-   long queue has been running, reduce *Simultaneous downloads* to 1 and set a
-   speed limit under Preferences > Downloading.
+**1. No JavaScript runtime.** Check the top of the Output tab: the application
+reports the runtime it found at startup. If it reports none, that is the cause.
+Install deno, or name another runtime in Preferences. Updating yt-dlp does not
+help, because the runtime is a separate program.
 
-The first 403 in a session writes this list to the Output tab, so it is to hand
-when it happens.
+**Help > Check download support** tests all four external tools and reports
+which is missing, with the command to fix it. Start there.
+
+**2. A PO token is required.** A Proof of Origin token is a separate mechanism
+from the JS runtime, and having a runtime does not supply one. Without it,
+requests for the affected clients can be refused outright. Run
+`yt-dlp -v "<video URL>" 2>&1 | grep -i "pot\|PO Token"`; if it reports
+`PO Token Providers: none`, install a provider plugin, or pass a token through
+**Preferences > Downloading > Extractor arguments**, for example
+`youtube:po_token=web.gvs+YOURTOKEN`. The
+[PO Token Guide](https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide) has the
+current details, which change often.
+
+Setting a provider up needs two pieces: a plugin for yt-dlp, and a generator
+for it to talk to.
+
+```bash
+pipx inject yt-dlp bgutil-ytdlp-pot-provider     # the plugin
+```
+
+For the generator, **Docker is only the most convenient option, not a
+requirement.** The script option runs on demand using the JavaScript runtime
+already needed above, with no daemon and no container:
+
+```bash
+git clone --single-branch --branch <VERSION> \
+  https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git ~/bgutil-ytdlp-pot-provider
+cd ~/bgutil-ytdlp-pot-provider/server && deno install --allow-scripts=npm:canvas --frozen
+```
+
+Cloned to that default location, nothing further needs configuring. It is
+slower than the HTTP server, since each call starts a fresh process, but it
+requires no background service. Match the branch to the installed plugin
+version - a mismatch fails as though the plugin were absent.
+
+Confirm either way with `yt-dlp -v <url> 2>&1 | grep "PO Token Providers"`,
+or with **Help > Check download support**.
+
+**3. yt-dlp is out of date.** `yt-dlp --update-to nightly`. The startup check
+reports the version and its age.
+
+**4. The format selector.** Separate video and audio streams are more fragile
+than a single pre-combined one, and fail with 403 more readily. Setting quality
+to `b` in Preferences trades resolution for reliability, which is worth testing
+if only some videos fail.
+
+**5. Rate limiting.** The likeliest cause when failures start *partway through*
+a download or only after a queue has been running. Reduce *Simultaneous
+downloads* to 1, set a speed limit, and set the pause options under
+**Preferences > Downloading**. Pauses cost time on every download, so leave
+them off until they are needed.
+
+### Narrowing it down
+
+`tools/test-403.sh` tries one video several ways and reports which combinations
+work, so the choice between "change a setting" and "install a token provider"
+is made on evidence:
+
+```bash
+./tools/test-403.sh "https://www.youtube.com/watch?v=VIDEOID"
+```
+
+Pick a video that reliably fails. Each attempt runs with the same flags the
+application uses and downloads for a few seconds - long enough, because a 403
+is raised when the media URL is first requested, not at the end. If one
+variant works, the script prints the exact setting to change. If they all
+fail, client selection is not the cause and a PO token provider is needed.
+
+### Pacing options
+
+| Setting | yt-dlp flag | Effect |
+|---|---|---|
+| Pause between requests | `--sleep-requests` | waits between metadata requests |
+| Pause between videos, min/max | `--sleep-interval`, `--max-sleep-interval` | waits a random time between videos |
+| Extraction retries | `--extractor-retries` | retries the metadata step |
+| Extractor arguments | `--extractor-args` | free-text, for PO tokens and client selection |
+
+All default to off or low. **Retry failed (N)** in the toolbar requeues
+everything that failed, and because each attempt re-runs yt-dlp from scratch it
+resolves fresh media URLs - which is often all a transient 403 needs.
 
 ## If the audio cuts out
 
