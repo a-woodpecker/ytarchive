@@ -22,7 +22,7 @@ jobs:
     outputs:
       version: ${{ steps.read.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - id: read
         run: |
           tag="${GITHUB_REF_NAME}"
@@ -50,7 +50,7 @@ jobs:
     # forwards. The reverse would not install on Debian 12.
     container: debian:12
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install dependencies
         run: |
@@ -64,7 +64,7 @@ jobs:
           chmod +x packaging/build-deb.sh
           ./packaging/build-deb.sh
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: deb
           path: packaging/dist/*.deb
@@ -75,7 +75,7 @@ jobs:
     needs: check-version
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -95,7 +95,7 @@ jobs:
           -Generator "Visual Studio 17 2022"
           -GitHubRepo "${{ github.repository }}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: installer
           path: packaging/dist/*.exe
@@ -106,12 +106,19 @@ jobs:
     needs: [ check-version, linux, windows ]
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/download-artifact@v4
+      # v7 changed where a single named artifact is extracted. Downloading
+      # every artifact still nests them by name, but the globs below are
+      # recursive so the step survives either layout.
+      - uses: actions/download-artifact@v7
         with:
           path: artifacts
 
       - name: List what will be attached
-        run: find artifacts -type f -printf '%p  %s bytes\n'
+        run: |
+          find artifacts -type f -printf '%p  %s bytes\n'
+          # Fail loudly here rather than publishing an empty release.
+          test -n "$(find artifacts -name '*.exe' -o -name '*.deb')" \
+            || { echo "::error::no artifacts were downloaded"; exit 1; }
 
       # The update check looks for an .exe asset and falls back to the release
       # page, so the installer must be attached for it to offer a direct
@@ -124,5 +131,5 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            artifacts/installer/*.exe
-            artifacts/deb/*.deb
+            artifacts/**/*.exe
+            artifacts/**/*.deb
