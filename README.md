@@ -161,6 +161,34 @@ sudo apt install pipx && pipx install yt-dlp
 `~/.local/bin` normally precedes `/usr/bin`, so a pipx copy wins even if the
 packaged one is present. Preferences can also point at a specific binary.
 
+#### The package is per-distribution
+
+Build it on the machine you intend to install it on. A `.deb` built on Ubuntu
+will **not** install on Debian, and vice versa: Ubuntu renamed Qt's runtime
+packages with a `t64` suffix during the 64-bit `time_t` transition, so an
+Ubuntu-built package asks for `libqt6core6t64` while Debian provides
+`libqt6core6`. apt refuses it rather than installing something broken.
+
+The build tags the package with the distribution codename to keep this visible
+- `ytarchive_0.1.0~noble_amd64.deb`, `ytarchive_0.1.0~bookworm_amd64.deb` - and
+prints a reminder at the end. The architecture is likewise whatever you built
+on, so an arm64 machine needs its own build.
+
+The *source* is portable; only the binary package is not.
+
+| Distribution | Qt | Status |
+|---|---|---|
+| Debian 12 bookworm | 6.4 | works |
+| Debian 13 trixie | 6.8 | works |
+| Ubuntu 24.04 noble | 6.4 | works, verified |
+| Ubuntu 22.04 jammy | 6.2 | **too old** - below the 6.3 minimum |
+
+Check before building on anything else:
+
+```bash
+apt policy qt6-base-dev | head -2
+```
+
 Uninstall with `sudo apt remove ytarchive`. Your archive folder and catalog are
 outside the package and are never touched.
 
