@@ -48,6 +48,9 @@ Settings Settings::load()
     v.sleepInterval     = s.value("sleepInterval", 0).toInt();
     v.maxSleepInterval  = s.value("maxSleepInterval", 0).toInt();
     v.extractorArgs     = s.value("extractorArgs").toString();
+    v.verboseLogging    = s.value("verboseLogging", false).toBool();
+    v.autoRetryAttempts = s.value("autoRetryAttempts", v.autoRetryAttempts).toInt();
+    v.autoRetryDelay    = s.value("autoRetryDelay", v.autoRetryDelay).toInt();
     v.writeInfoJson     = s.value("writeInfoJson", true).toBool();
     v.writeThumbnail    = s.value("writeThumbnail", true).toBool();
     v.writeDescription  = s.value("writeDescription", true).toBool();
@@ -84,6 +87,9 @@ void Settings::save() const
     s.setValue("sleepInterval", sleepInterval);
     s.setValue("maxSleepInterval", maxSleepInterval);
     s.setValue("extractorArgs", extractorArgs);
+    s.setValue("verboseLogging", verboseLogging);
+    s.setValue("autoRetryAttempts", autoRetryAttempts);
+    s.setValue("autoRetryDelay", autoRetryDelay);
     s.setValue("writeInfoJson", writeInfoJson);
     s.setValue("writeThumbnail", writeThumbnail);
     s.setValue("writeDescription", writeDescription);

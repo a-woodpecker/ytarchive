@@ -50,4 +50,11 @@ QString infoJsonPathFor(const QString &mediaPath);
 // Human-readable summary of a failed run, pulled out of yt-dlp's stderr.
 QString extractError(const QString &stderrText);
 
+// Rewrites a yt-dlp error into something meaningful inside this program.
+// yt-dlp writes for someone at a command line and tells them to pass flags
+// this application already manages, so its advice is actively misleading here.
+// The original text still reaches the Output tab; this is what the cards and
+// the queue show.
+QString friendlyError(const QString &rawError);
+
 } // namespace YtDlp

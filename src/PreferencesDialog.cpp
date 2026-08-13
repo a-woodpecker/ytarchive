@@ -161,6 +161,27 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
         tr("Retries of the metadata step, separate from retries of the transfer."));
     downloadForm->addRow(tr("Extraction retries"), m_extractorRetries);
 
+    m_autoRetryAttempts = new QSpinBox(this);
+    m_autoRetryAttempts->setRange(0, 10);
+    m_autoRetryAttempts->setValue(current.autoRetryAttempts);
+    m_autoRetryAttempts->setSpecialValueText(tr("Do not retry"));
+    downloadForm->addRow(tr("Automatic retries"), m_autoRetryAttempts);
+
+    m_autoRetryDelay = new QSpinBox(this);
+    m_autoRetryDelay->setRange(1, 600);
+    m_autoRetryDelay->setSuffix(tr(" s"));
+    m_autoRetryDelay->setValue(current.autoRetryDelay);
+    downloadForm->addRow(tr("First retry after"), m_autoRetryDelay);
+
+    auto *retryNote = new QLabel(
+        tr("Each retry re-runs yt-dlp from scratch, which re-extracts the media URLs - "
+           "usually what a 403 actually needs. The wait grows with each attempt. "
+           "Videos the service reports as private, removed or members-only are never "
+           "retried."), this);
+    retryNote->setWordWrap(true);
+    retryNote->setObjectName(QStringLiteral("hint"));
+    downloadForm->addRow(QString(), retryNote);
+
     m_sleepRequests = new QSpinBox(this);
     m_sleepRequests->setRange(0, 60);
     m_sleepRequests->setSuffix(tr(" s"));
@@ -201,6 +222,18 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
     extractorNote->setWordWrap(true);
     extractorNote->setObjectName(QStringLiteral("hint"));
     downloadForm->addRow(QString(), extractorNote);
+
+    m_verboseLogging = new QCheckBox(tr("Verbose yt-dlp output"), this);
+    m_verboseLogging->setChecked(current.verboseLogging);
+    downloadForm->addRow(tr("Diagnostics"), m_verboseLogging);
+
+    auto *verboseNote = new QLabel(
+        tr("Adds <tt>-v</tt>, keeps warnings, and writes the full command line to the "
+           "Output tab. This is how to confirm which yt-dlp is being run and whether "
+           "a PO token provider is loaded. Noisy; leave it off unless diagnosing."), this);
+    verboseNote->setWordWrap(true);
+    verboseNote->setObjectName(QStringLiteral("hint"));
+    downloadForm->addRow(QString(), verboseNote);
 
     m_filenameTemplate = new QLineEdit(current.filenameTemplate, this);
     downloadForm->addRow(tr("Filename template"), m_filenameTemplate);
@@ -244,9 +277,39 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
     auto *access = new QWidget(this);
     auto *accessForm = new QFormLayout(access);
 
-    m_cookiesBrowser = new QLineEdit(current.cookiesFromBrowser, this);
-    m_cookiesBrowser->setPlaceholderText(tr("firefox, chrome, edge, safari…"));
+    // A list rather than a text field: the error that sends people here names
+    // this setting, so it should be selectable without knowing yt-dlp's syntax.
+    m_cookiesBrowser = new QComboBox(this);
+    m_cookiesBrowser->setEditable(true);
+    m_cookiesBrowser->addItem(tr("None"), QString());
+    for (const QString &browser : { QStringLiteral("firefox"), QStringLiteral("chrome"),
+                                    QStringLiteral("chromium"), QStringLiteral("brave"),
+                                    QStringLiteral("edge"), QStringLiteral("opera"),
+                                    QStringLiteral("vivaldi"), QStringLiteral("safari"),
+                                    QStringLiteral("whale") }) {
+        m_cookiesBrowser->addItem(browser, browser);
+    }
+    if (current.cookiesFromBrowser.isEmpty()) {
+        m_cookiesBrowser->setCurrentIndex(0);
+    } else {
+        const int index = m_cookiesBrowser->findData(current.cookiesFromBrowser);
+        if (index >= 0)
+            m_cookiesBrowser->setCurrentIndex(index);
+        else
+            m_cookiesBrowser->setCurrentText(current.cookiesFromBrowser);
+    }
     accessForm->addRow(tr("Use cookies from browser"), m_cookiesBrowser);
+
+    auto *cookiesNote = new QLabel(
+        tr("Pick the browser you are signed in to. Cookies are read from its profile "
+           "each time, so nothing is stored here and nothing needs exporting. For a "
+           "named profile, type it as <tt>firefox:profilename</tt>.<br><br>"
+           "Close the browser first: some keep their cookie database locked while "
+           "running. Set this only when you need it - passing cookies can make some "
+           "formats unavailable, and ties your downloads to your account."), this);
+    cookiesNote->setWordWrap(true);
+    cookiesNote->setObjectName(QStringLiteral("hint"));
+    accessForm->addRow(QString(), cookiesNote);
 
     m_cookiesFile = new QLineEdit(current.cookiesFile, this);
     accessForm->addRow(tr("Cookies file"),
@@ -303,6 +366,9 @@ Settings PreferencesDialog::result() const
     s.sleepInterval     = m_sleepInterval->value();
     s.maxSleepInterval  = m_maxSleepInterval->value();
     s.extractorArgs     = m_extractorArgs->text().trimmed();
+    s.verboseLogging    = m_verboseLogging->isChecked();
+    s.autoRetryAttempts = m_autoRetryAttempts->value();
+    s.autoRetryDelay    = m_autoRetryDelay->value();
     s.filenameTemplate  = m_filenameTemplate->text().trimmed();
     s.writeInfoJson     = m_infoJson->isChecked();
     s.writeThumbnail    = m_thumbnail->isChecked();
@@ -314,7 +380,12 @@ Settings PreferencesDialog::result() const
     s.embedChapters     = m_embedChapters->isChecked();
     s.theme             = m_theme->currentData().toString();
     s.checkUpdatesOnStartup = m_checkUpdates->isChecked();
-    s.cookiesFromBrowser= m_cookiesBrowser->text().trimmed();
+    // Index 0 is "None"; anything else is either a listed browser or typed.
+    s.cookiesFromBrowser = m_cookiesBrowser->currentIndex() == 0
+                               ? QString()
+                               : m_cookiesBrowser->currentText().trimmed();
+    if (s.cookiesFromBrowser.compare(tr("None"), Qt::CaseInsensitive) == 0)
+        s.cookiesFromBrowser.clear();
     s.cookiesFile       = m_cookiesFile->text().trimmed();
 
     if (s.ytDlpPath.isEmpty())

@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QPointer>
+#include <QQueue>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTimer>
@@ -17,7 +18,17 @@
 namespace {
 // How long yt-dlp is given to shut down cleanly before it is killed outright.
 constexpr int kTerminateGraceMs = 4000;
-}
+
+// Failures the service is reporting as final. Retrying these achieves nothing
+// and buries the real reason under repeated attempts.
+const char *kPermanentMarkers[] = {
+    "private video", "video unavailable", "removed by the uploader",
+    "members-only", "join this channel", "sign in to confirm your age",
+    "age-restricted", "copyright", "not available in your country",
+    "account associated with this video has been terminated",
+    "this live event will begin", "premieres in",
+};
+} // namespace
 
 DownloadManager::DownloadManager(Database *db, QObject *parent)
     : QObject(parent)
@@ -127,6 +138,15 @@ void DownloadManager::startJob(Job *job)
     connect(proc, &QProcess::finished, this,
             [this, job](int code, QProcess::ExitStatus) { handleFinished(job, code); });
 
+    if (m_settings.verboseLogging) {
+        // Quoted, so the line can be pasted into a shell and run as-is.
+        QStringList quoted;
+        for (const QString &a : proc->arguments())
+            quoted << (a.contains(QChar(' ')) ? QStringLiteral("\"%1\"").arg(a) : a);
+        emit logMessage(QStringLiteral("$ %1 %2")
+                            .arg(proc->program(), quoted.join(QChar(' '))));
+    }
+
     if (m_db)
         m_db->setVideoState(job->video.pk, DownloadState::Downloading);
     emit videoStateChanged(job->video.pk, DownloadState::Downloading);
@@ -196,6 +216,80 @@ void DownloadManager::parseProgressLine(Job *job, const QString &line)
     emit progress(p);
 }
 
+bool DownloadManager::looksTransient(const QString &message)
+{
+    const QString lower = message.toLower();
+    for (const char *marker : kPermanentMarkers) {
+        if (lower.contains(QLatin1String(marker)))
+            return false;
+    }
+
+    // A 403 on a media URL is the common case: the extraction succeeded and
+    // the transfer was refused, which a fresh extraction often resolves.
+    static const char *transient[] = {
+        "403", "unable to download video data", "timed out", "timeout",
+        "connection reset", "connection aborted", "transporterror",
+        "temporary failure", "unable to connect", "read error",
+        "incomplete", "500", "502", "503", "504", "429",
+    };
+    for (const char *marker : transient) {
+        if (lower.contains(QLatin1String(marker)))
+            return true;
+    }
+    return false;
+}
+
+bool DownloadManager::scheduleRetry(Job *job, const QString &reason)
+{
+    if (m_settings.autoRetryAttempts <= 0 || job->cancelled)
+        return false;
+    if (job->attempt >= m_settings.autoRetryAttempts)
+        return false;
+    if (!looksTransient(reason))
+        return false;
+
+    ++job->attempt;
+    const int delay = qMax(1, m_settings.autoRetryDelay) * job->attempt;
+
+    if (job->process) {
+        job->process->disconnect(this);
+        job->process->deleteLater();
+        job->process = nullptr;
+    }
+    QFile::remove(job->printFilePath);
+
+    const qint64 pk = job->video.pk;
+    m_active.remove(pk);          // frees the slot for another video meanwhile
+
+    if (m_db)
+        m_db->setVideoState(pk, DownloadState::Queued);
+    emit videoStateChanged(pk, DownloadState::Queued);
+    emit logMessage(tr("Retrying \"%1\" in %2s (attempt %3 of %4): %5")
+                        .arg(job->video.title)
+                        .arg(delay)
+                        .arg(job->attempt + 1)
+                        .arg(m_settings.autoRetryAttempts + 1)
+                        .arg(reason));
+
+    job->progress.stage = tr("Waiting to retry");
+    emit progress(job->progress);
+
+    // Re-queued rather than restarted immediately: an instant repeat tends to
+    // be refused the same way, and the delay grows with each attempt.
+    QPointer<DownloadManager> self(this);
+    QTimer::singleShot(delay * 1000, this, [self, job] {
+        if (!self)
+            return;
+        if (!self->m_pendingByPk.contains(job->video.pk))
+            return;               // cancelled while waiting
+        self->m_queue.enqueue(job);
+        self->pumpQueue();
+    });
+
+    pumpQueue();
+    return true;
+}
+
 void DownloadManager::handleFinished(Job *job, int exitCode)
 {
     // Killing the process makes it exit non-zero. Without this check the user's
@@ -206,10 +300,16 @@ void DownloadManager::handleFinished(Job *job, int exitCode)
     }
 
     if (exitCode != 0) {
-        const QString detail = YtDlp::extractError(job->stderrBuffer);
-        finalize(job, Outcome::Failed, detail.isEmpty()
-                                           ? tr("yt-dlp exited with code %1.").arg(exitCode)
-                                           : detail);
+        const QString raw = YtDlp::extractError(job->stderrBuffer);
+        // Classification reads the original text: the rewritten form is shorter
+        // and would lose the markers it looks for.
+        if (scheduleRetry(job, raw))
+            return;
+
+        const QString message = raw.isEmpty()
+                                    ? tr("yt-dlp exited with code %1.").arg(exitCode)
+                                    : YtDlp::friendlyError(raw);
+        finalize(job, Outcome::Failed, message);
         return;
     }
 
@@ -229,6 +329,11 @@ void DownloadManager::handleFinished(Job *job, int exitCode)
         finalize(job, Outcome::Failed,
                  tr("The download reported success but no file was found on disk."));
         return;
+    }
+
+    if (job->attempt > 0) {
+        emit logMessage(tr("\"%1\" succeeded on attempt %2.")
+                            .arg(job->video.title).arg(job->attempt + 1));
     }
 
     const QString infoJson = YtDlp::infoJsonPathFor(mediaPath);

@@ -1,5 +1,6 @@
 #include "YtDlp.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -14,14 +15,21 @@ namespace {
 
 // Common flags for every invocation: never colourise, never touch the user's
 // shell config, and always emit machine-readable progress.
-QStringList baseArgs()
+QStringList baseArgs(const Settings &s)
 {
-    return {
+    QStringList args{
         QStringLiteral("--no-colors"),
-        QStringLiteral("--no-warnings"),
         QStringLiteral("--ignore-config"),
         QStringLiteral("--no-playlist-reverse")
     };
+    if (s.verboseLogging) {
+        // -v is what prints the plugin and PO token provider lines. Warnings
+        // are left in, since the provider reports through them.
+        args << QStringLiteral("-v");
+    } else {
+        args << QStringLiteral("--no-warnings");
+    }
+    return args;
 }
 
 // Only deno is enabled by default, so any other runtime must be named. Applied
@@ -92,7 +100,7 @@ QString bestThumbnail(const QJsonObject &obj)
 
 QStringList channelProbeArgs(const QString &channelUrl, const Settings &settings)
 {
-    QStringList args = baseArgs();
+    QStringList args = baseArgs(settings);
     appendRuntimeArgs(args, settings);
     appendExtractorArgs(args, settings);
     args << QStringLiteral("--flat-playlist")
@@ -104,7 +112,7 @@ QStringList channelProbeArgs(const QString &channelUrl, const Settings &settings
 
 QStringList channelListArgs(const QString &channelUrl, const Settings &settings)
 {
-    QStringList args = baseArgs();
+    QStringList args = baseArgs(settings);
     appendRuntimeArgs(args, settings);
     appendExtractorArgs(args, settings);
     appendPacingArgs(args, settings);
@@ -125,7 +133,7 @@ QStringList downloadArgs(const VideoInfo &video,
                          const QString &printFile,
                          const Settings &settings)
 {
-    QStringList args = baseArgs();
+    QStringList args = baseArgs(settings);
 
     args << QStringLiteral("--newline")
          << QStringLiteral("--no-playlist")
@@ -371,6 +379,99 @@ QString infoJsonPathFor(const QString &mediaPath)
 {
     QFileInfo fi(mediaPath);
     return fi.absoluteDir().filePath(fi.completeBaseName() + QStringLiteral(".info.json"));
+}
+
+QString friendlyError(const QString &rawError)
+{
+    const QString lower = rawError.toLower();
+
+    // Ordered: the first match wins, so put the specific before the general.
+    struct Rule { const char *marker; const char *message; };
+    static const Rule rules[] = {
+        { "sign in to confirm your age",
+          QT_TRANSLATE_NOOP("YtDlp",
+            "Age-restricted. Set \"Use cookies from browser\" in "
+            "Preferences > Access, then retry.") },
+        { "age-restricted",
+          QT_TRANSLATE_NOOP("YtDlp",
+            "Age-restricted. Set \"Use cookies from browser\" in "
+            "Preferences > Access, then retry.") },
+        { "join this channel",
+          QT_TRANSLATE_NOOP("YtDlp",
+            "Members-only. Needs cookies from an account with membership: "
+            "Preferences > Access.") },
+        { "members-only",
+          QT_TRANSLATE_NOOP("YtDlp",
+            "Members-only. Needs cookies from an account with membership: "
+            "Preferences > Access.") },
+        { "private video",
+          QT_TRANSLATE_NOOP("YtDlp", "Private video.") },
+        { "removed by the uploader",
+          QT_TRANSLATE_NOOP("YtDlp", "Removed by the uploader.") },
+        { "account associated with this video has been terminated",
+          QT_TRANSLATE_NOOP("YtDlp", "The channel's account has been terminated.") },
+        { "not available in your country",
+          QT_TRANSLATE_NOOP("YtDlp", "Blocked in your region.") },
+        { "copyright",
+          QT_TRANSLATE_NOOP("YtDlp", "Blocked on copyright grounds.") },
+        { "this live event will begin",
+          QT_TRANSLATE_NOOP("YtDlp", "Not published yet: a scheduled live event.") },
+        { "premieres in",
+          QT_TRANSLATE_NOOP("YtDlp", "Not published yet: a scheduled premiere.") },
+        { "video unavailable",
+          QT_TRANSLATE_NOOP("YtDlp", "Video unavailable.") },
+        { "requested format is not available",
+          QT_TRANSLATE_NOOP("YtDlp",
+            "No matching format. Try a different quality in "
+            "Preferences > Downloading.") },
+        { "no space left on device",
+          QT_TRANSLATE_NOOP("YtDlp", "The disk is full.") },
+        { "403",
+          QT_TRANSLATE_NOOP("YtDlp",
+            "The media URL was refused (403). Help > Check download support "
+            "tests what is missing.") },
+        { "429",
+          QT_TRANSLATE_NOOP("YtDlp",
+            "Rate limited. Reduce simultaneous downloads, or set the pause "
+            "options in Preferences > Downloading.") },
+        { "unable to connect",
+          QT_TRANSLATE_NOOP("YtDlp", "Could not reach the service.") },
+        { "timed out",
+          QT_TRANSLATE_NOOP("YtDlp", "The connection timed out.") },
+        { "ffmpeg",
+          QT_TRANSLATE_NOOP("YtDlp",
+            "ffmpeg failed while merging. Check it under Help > Check download "
+            "support.") },
+    };
+
+    for (const Rule &rule : rules) {
+        if (lower.contains(QLatin1String(rule.marker)))
+            return QCoreApplication::translate("YtDlp", rule.message);
+    }
+
+    // Nothing matched: tidy the raw text rather than passing it through whole.
+    QString text = rawError;
+
+    // Drop yt-dlp's "[youtube] VIDEOID: " prefix.
+    static const QRegularExpression prefix(
+        QStringLiteral("^\\s*\\[[^\\]]+\\]\\s*[A-Za-z0-9_-]{6,}:\\s*"));
+    text.remove(prefix);
+
+    // Cut the command-line advice and documentation links, which point at
+    // flags this program sets itself.
+    static const QRegularExpression tail(
+        QStringLiteral("\\s*(Use --cookies|See +https?://|Also see|"
+                       "for how to manually|Please report this issue).*$"),
+        QRegularExpression::CaseInsensitiveOption);
+    text.remove(tail);
+
+    static const QRegularExpression urls(QStringLiteral("https?://\\S+"));
+    text.remove(urls);
+
+    text = text.simplified();
+    if (text.size() > 180)
+        text = text.left(177) + QStringLiteral("...");
+    return text;
 }
 
 QString extractError(const QString &stderrText)

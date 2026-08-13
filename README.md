@@ -354,7 +354,7 @@ intend to support** - which is why the release workflow builds the `.deb`
 inside a `debian:12` container rather than on the Ubuntu runner.
 
 The distribution codename stays in the filename and version
-(`ytarchive_0.1.1~bookworm_amd64.deb`) as a record of where it was built.
+(`ytarchive_0.2.0~bookworm_amd64.deb`) as a record of where it was built.
 Architecture is likewise whatever you built on, so an arm64 machine needs its
 own build.
 
@@ -522,6 +522,27 @@ sessions, so a panel resized once stays that way.
 
 Downloads and Output are tabbed together at the bottom; click a tab to switch.
 
+## Age-restricted and members-only videos
+
+Some videos need an account. **Preferences > Access > Use cookies from browser**
+takes the browser you are signed in to; yt-dlp reads its cookie database
+directly, so nothing is exported and nothing is stored by this application.
+For a named profile, type `firefox:profilename`.
+
+Close the browser first - several keep their cookie database locked while
+running.
+
+Then use **Retry failed** on the videos that were refused. Age and membership
+failures are never retried automatically, because retrying cannot fix them
+until this setting changes.
+
+Set it only when needed. Passing cookies can make some formats *unavailable*,
+and it ties every download to your account.
+
+Error messages shown on cards and in the queue are rewritten to name the
+setting in this program rather than the yt-dlp command-line flag they
+originally referred to. The unmodified text stays in the Output tab.
+
 ## If downloads fail with HTTP 403
 
 A 403 means the media URL was refused. It does **not** mean the video is
@@ -534,7 +555,22 @@ Install deno, or name another runtime in Preferences. Updating yt-dlp does not
 help, because the runtime is a separate program.
 
 **Help > Check download support** tests all four external tools and reports
-which is missing, with the command to fix it. Start there.
+which is missing, with the command to fix it. It runs the same yt-dlp, with the
+same environment, that a download would - so its answer is the application's
+view, not the shell's. Those can differ.
+
+If the two disagree, turn on **Preferences > Downloading > Verbose yt-dlp
+output**. That adds `-v`, stops suppressing warnings, and writes the full
+command line to the Output tab, so the binary being run and the providers it
+loaded are both visible:
+
+```
+$ /home/you/.local/bin/yt-dlp --no-colors --ignore-config -v ...
+[debug] [youtube] [pot] PO Token Providers: bgutil:script-deno-1.3.1 (external)
+```
+
+A different path there than the one your shell resolves is the whole problem -
+a plugin injected into one yt-dlp is invisible to another.
 
 **2. A PO token is required.** A Proof of Origin token is a separate mechanism
 from the JS runtime, and having a runtime does not supply one. Without it,
@@ -610,9 +646,45 @@ fail, client selection is not the cause and a PO token provider is needed.
 | Extraction retries | `--extractor-retries` | retries the metadata step |
 | Extractor arguments | `--extractor-args` | free-text, for PO tokens and client selection |
 
-All default to off or low. **Retry failed (N)** in the toolbar requeues
-everything that failed, and because each attempt re-runs yt-dlp from scratch it
-resolves fresh media URLs - which is often all a transient 403 needs.
+All default to off or low.
+
+### Automatic retries
+
+Because a retry re-runs yt-dlp from scratch, it re-extracts the media URLs -
+which is usually what a 403 actually needs, rather than a repeat of the same
+refused request. Failures that look transient are therefore retried
+automatically, three times by default, with a delay that grows on each attempt
+(**Preferences > Downloading > Automatic retries**).
+
+Failures the service reports as final - private, removed, members-only,
+age-restricted, region-blocked, terminated account - are **never** retried.
+Retrying those wastes requests and buries the real reason. A permanent marker
+wins even when the message also contains a 403.
+
+**Retry failed (N)** in the toolbar remains for anything that exhausts its
+automatic attempts.
+
+### One cause of intermittent 403s
+
+When the service forces SABR streaming on a client, yt-dlp skips that client's
+formats and falls back to another - often `android_vr`, whose URLs are refused
+even though a PO token was successfully minted for the *first* client. The
+verbose log shows this plainly:
+
+```
+Retrieved a gvs PO Token for web_safari client
+Some web_safari client https formats have been skipped ... forcing SABR streaming
+Invoking http downloader on "...&c=ANDROID_VR&..."
+ERROR: HTTP Error 403
+```
+
+Which client gets forced varies, which is why the failures come and go and why
+retrying works. Excluding the fallback client in
+**Preferences > Downloading > Extractor arguments** can stabilise it:
+
+```
+youtube:player_client=default,-android_vr
+```
 
 ## If the audio cuts out
 

@@ -1008,7 +1008,12 @@ void MainWindow::checkYtDlpVersion()
         if (version.isEmpty())
             return;
 
-        m_log->appendPlainText(tr("yt-dlp %1").arg(version));
+        const QString resolved = m_settings.ytDlpPath.contains(QDir::separator())
+                                     ? m_settings.ytDlpPath
+                                     : findToolExecutable(m_settings.ytDlpPath);
+        m_log->appendPlainText(tr("yt-dlp %1 at %2")
+                                   .arg(version, resolved.isEmpty()
+                                                     ? m_settings.ytDlpPath : resolved));
 
         // A JS runtime is a separate binary, so updating yt-dlp does nothing
         // for it. Without one, listings succeed and every download 403s.

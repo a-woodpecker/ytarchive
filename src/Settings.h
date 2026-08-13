@@ -29,6 +29,17 @@ struct Settings {
     int     sleepInterval = 0;      // minimum seconds between videos
     int     maxSleepInterval = 0;   // upper bound; randomised within the range
 
+    // Automatic retry of failures that look transient. Re-running yt-dlp from
+    // scratch re-extracts the media URLs, which is what actually fixes a 403,
+    // so a retry is far more than a repeat of the same request.
+    int     autoRetryAttempts = 3;   // 0 disables
+    int     autoRetryDelay = 20;     // seconds; multiplied by the attempt number
+
+    // Adds -v and stops suppressing warnings, and logs the exact command line
+    // for every yt-dlp invocation. The only way to see plugin and PO token
+    // diagnostics from inside the application.
+    bool    verboseLogging = false;
+
     // Free-text --extractor-args, e.g. a GVS PO token or a client override.
     // Deliberately not a fixed set of options: what the service demands here
     // changes far faster than this program is rebuilt.
