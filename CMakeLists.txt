@@ -30,6 +30,7 @@ qt_add_executable(ytarchive
     src/VideoCardDelegate.h   src/VideoCardDelegate.cpp
     src/DownloadsPanel.h      src/DownloadsPanel.cpp
     src/PreferencesDialog.h   src/PreferencesDialog.cpp
+    src/VideoDetailsDialog.h  src/VideoDetailsDialog.cpp
     src/UpdateChecker.h       src/UpdateChecker.cpp
     src/MainWindow.h          src/MainWindow.cpp
 )

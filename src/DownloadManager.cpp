@@ -7,12 +7,19 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QPointer>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QTimer>
 #include <QTemporaryFile>
 #include <QUuid>
 
-DownloadManager::DownloadManager(Database* db, QObject* parent)
+namespace {
+// How long yt-dlp is given to shut down cleanly before it is killed outright.
+constexpr int kTerminateGraceMs = 4000;
+}
+
+DownloadManager::DownloadManager(Database *db, QObject *parent)
     : QObject(parent)
     , m_db(db)
 {
@@ -21,13 +28,18 @@ DownloadManager::DownloadManager(Database* db, QObject* parent)
 DownloadManager::~DownloadManager()
 {
     cancelAll();
+    // Let anything still winding down finish writing its resume state.
+    for (Job *job : std::as_const(m_active)) {
+        if (job->process)
+            job->process->waitForFinished(kTerminateGraceMs);
+    }
     qDeleteAll(m_queue);
     m_queue.clear();
 }
 
-void DownloadManager::enqueue(const QVector<VideoInfo>& videos,
-    const QString& channelTitle,
-    const QString& channelId)
+void DownloadManager::enqueue(const QVector<VideoInfo> &videos,
+                              const QString &channelTitle,
+                              const QString &channelId)
 {
     const QString dir = m_settings.channelDir(channelTitle, channelId);
     QDir().mkpath(dir);
@@ -35,18 +47,18 @@ void DownloadManager::enqueue(const QVector<VideoInfo>& videos,
     const QString scratch = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
 
     int added = 0;
-    for (const VideoInfo& v : videos) {
+    for (const VideoInfo &v : videos) {
         if (v.pk < 0 || m_pendingByPk.contains(v.pk))
             continue;
 
-        auto* job = new Job;
+        auto *job = new Job;
         job->video = v;
         job->channelTitle = channelTitle;
         job->channelId = channelId;
         job->destinationDir = dir;
         job->printFilePath = QDir(scratch).filePath(
             QStringLiteral("ytarchive-%1.path")
-            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+                .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
 
         job->progress.videoPk = v.pk;
         job->progress.title = v.title;
@@ -72,7 +84,7 @@ void DownloadManager::enqueue(const QVector<VideoInfo>& videos,
 void DownloadManager::pumpQueue()
 {
     while (m_active.size() < qMax(1, m_settings.maxConcurrent) && !m_queue.isEmpty()) {
-        Job* job = m_queue.dequeue();
+        Job *job = m_queue.dequeue();
         m_active.insert(job->video.pk, job);
         startJob(job);
     }
@@ -82,15 +94,15 @@ void DownloadManager::pumpQueue()
         emit allFinished();
 }
 
-void DownloadManager::startJob(Job* job)
+void DownloadManager::startJob(Job *job)
 {
     QDir().mkpath(job->destinationDir);
 
-    auto* proc = new QProcess(this);
+    auto *proc = new QProcess(this);
     job->process = proc;
     proc->setProgram(m_settings.ytDlpPath);
     proc->setArguments(YtDlp::downloadArgs(job->video, job->destinationDir,
-        job->printFilePath, m_settings));
+                                           job->printFilePath, m_settings));
 
     job->progress.stage = tr("Starting");
     emit progress(job->progress);
@@ -99,18 +111,18 @@ void DownloadManager::startJob(Job* job)
     connect(proc, &QProcess::readyReadStandardError, this, [this, job] {
         const QString chunk = QString::fromUtf8(job->process->readAllStandardError());
         job->stderrBuffer += chunk;
-        for (const QString& line : chunk.split(QChar('\n'), Qt::SkipEmptyParts))
+        for (const QString &line : chunk.split(QChar('\n'), Qt::SkipEmptyParts))
             emit logMessage(line.trimmed());
-        });
+    });
     connect(proc, &QProcess::errorOccurred, this, [this, job](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart) {
             finalize(job, Outcome::Failed,
-                tr("Could not run yt-dlp (looked for \"%1\"). Set its full path in "
-                    "Preferences.").arg(m_settings.ytDlpPath));
+                     tr("Could not run yt-dlp (looked for \"%1\"). Set its full path in "
+                        "Preferences.").arg(m_settings.ytDlpPath));
         }
-        });
+    });
     connect(proc, &QProcess::finished, this,
-        [this, job](int code, QProcess::ExitStatus) { handleFinished(job, code); });
+            [this, job](int code, QProcess::ExitStatus) { handleFinished(job, code); });
 
     if (m_db)
         m_db->setVideoState(job->video.pk, DownloadState::Downloading);
@@ -119,10 +131,10 @@ void DownloadManager::startJob(Job* job)
     proc->start();
 }
 
-void DownloadManager::handleStdout(Job* job)
+void DownloadManager::handleStdout(Job *job)
 {
     const QString chunk = QString::fromUtf8(job->process->readAllStandardOutput());
-    for (const QString& raw : chunk.split(QChar('\n'), Qt::SkipEmptyParts)) {
+    for (const QString &raw : chunk.split(QChar('\n'), Qt::SkipEmptyParts)) {
         const QString line = raw.trimmed();
         if (line.isEmpty())
             continue;
@@ -136,7 +148,7 @@ void DownloadManager::handleStdout(Job* job)
         if (line.contains(QStringLiteral("[Merger]")))
             job->progress.stage = tr("Merging streams");
         else if (line.contains(QStringLiteral("[Metadata]")) ||
-            line.contains(QStringLiteral("[ThumbnailsConvertor]")))
+                 line.contains(QStringLiteral("[ThumbnailsConvertor]")))
             job->progress.stage = tr("Writing metadata");
         else if (line.contains(QStringLiteral("[ExtractAudio]")))
             job->progress.stage = tr("Extracting audio");
@@ -148,40 +160,40 @@ void DownloadManager::handleStdout(Job* job)
     }
 }
 
-void DownloadManager::parseProgressLine(Job* job, const QString& line)
+void DownloadManager::parseProgressLine(Job *job, const QString &line)
 {
     // Format: @P@|downloaded|total|speed|eta   ("NA" for anything unknown.)
     const QStringList parts = line.split(QChar('|'));
     if (parts.size() < 5)
         return;
 
-    auto toNumber = [](const QString& s) -> double {
+    auto toNumber = [](const QString &s) -> double {
         if (s.isEmpty() || s == QLatin1String("NA") || s == QLatin1String("None"))
             return -1.0;
         bool ok = false;
         const double d = s.toDouble(&ok);
         return ok ? d : -1.0;
-        };
+    };
 
     const double downloaded = toNumber(parts.at(1));
-    const double total = toNumber(parts.at(2));
-    const double speed = toNumber(parts.at(3));
-    const double eta = toNumber(parts.at(4));
+    const double total      = toNumber(parts.at(2));
+    const double speed      = toNumber(parts.at(3));
+    const double eta        = toNumber(parts.at(4));
 
-    Progress& p = job->progress;
+    Progress &p = job->progress;
     p.downloadedBytes = downloaded > 0 ? static_cast<qint64>(downloaded) : 0;
-    p.totalBytes = total > 0 ? static_cast<qint64>(total) : 0;
+    p.totalBytes      = total > 0 ? static_cast<qint64>(total) : 0;
     p.speedBytesPerSec = speed > 0 ? speed : 0.0;
-    p.etaSeconds = eta >= 0 ? static_cast<qint64>(eta) : -1;
+    p.etaSeconds      = eta >= 0 ? static_cast<qint64>(eta) : -1;
     p.fraction = (total > 0 && downloaded >= 0)
-        ? qBound(0.0, downloaded / total, 1.0)
-        : -1.0;   // indeterminate
+                     ? qBound(0.0, downloaded / total, 1.0)
+                     : -1.0;   // indeterminate
     p.stage = tr("Downloading");
 
     emit progress(p);
 }
 
-void DownloadManager::handleFinished(Job* job, int exitCode)
+void DownloadManager::handleFinished(Job *job, int exitCode)
 {
     // Killing the process makes it exit non-zero. Without this check the user's
     // own cancellation would be reported back to them as a download failure.
@@ -193,8 +205,8 @@ void DownloadManager::handleFinished(Job* job, int exitCode)
     if (exitCode != 0) {
         const QString detail = YtDlp::extractError(job->stderrBuffer);
         finalize(job, Outcome::Failed, detail.isEmpty()
-            ? tr("yt-dlp exited with code %1.").arg(exitCode)
-            : detail);
+                                           ? tr("yt-dlp exited with code %1.").arg(exitCode)
+                                           : detail);
         return;
     }
 
@@ -203,7 +215,7 @@ void DownloadManager::handleFinished(Job* job, int exitCode)
     QFile pathFile(job->printFilePath);
     if (pathFile.open(QIODevice::ReadOnly)) {
         const QStringList lines = QString::fromUtf8(pathFile.readAll())
-            .split(QChar('\n'), Qt::SkipEmptyParts);
+                                      .split(QChar('\n'), Qt::SkipEmptyParts);
         if (!lines.isEmpty())
             mediaPath = lines.last().trimmed();
         pathFile.close();
@@ -212,7 +224,7 @@ void DownloadManager::handleFinished(Job* job, int exitCode)
 
     if (mediaPath.isEmpty() || !QFileInfo::exists(mediaPath)) {
         finalize(job, Outcome::Failed,
-            tr("The download reported success but no file was found on disk."));
+                 tr("The download reported success but no file was found on disk."));
         return;
     }
 
@@ -221,8 +233,8 @@ void DownloadManager::handleFinished(Job* job, int exitCode)
     // The upload date from info.json is authoritative; the listing's date was
     // only an estimate.
     QDateTime uploadDate = QFileInfo::exists(infoJson)
-        ? YtDlp::uploadDateFromInfoJson(infoJson)
-        : QDateTime();
+                               ? YtDlp::uploadDateFromInfoJson(infoJson)
+                               : QDateTime();
     if (!uploadDate.isValid())
         uploadDate = job->video.uploadDate;
 
@@ -240,7 +252,7 @@ void DownloadManager::handleFinished(Job* job, int exitCode)
         // and QDir's glob syntax would read "[dQw4w9WgXcQ]" as a character
         // class, silently matching nothing.
         const QStringList names = dir.entryList(QDir::Files);
-        for (const QString& name : names) {
+        for (const QString &name : names) {
             if (name.startsWith(prefix, Qt::CaseSensitive))
                 setFileModificationTime(dir.filePath(name), uploadDate);
         }
@@ -249,14 +261,14 @@ void DownloadManager::handleFinished(Job* job, int exitCode)
     const qint64 size = QFileInfo(mediaPath).size();
     if (m_db) {
         m_db->recordDownload(job->video.pk, mediaPath,
-            QFileInfo::exists(infoJson) ? infoJson : QString(),
-            size, uploadDate);
+                             QFileInfo::exists(infoJson) ? infoJson : QString(),
+                             size, uploadDate);
     }
 
     finalize(job, Outcome::Success, mediaPath);
 }
 
-void DownloadManager::finalize(Job* job, Outcome outcome, const QString& message)
+void DownloadManager::finalize(Job *job, Outcome outcome, const QString &message)
 {
     const qint64 pk = job->video.pk;
 
@@ -298,10 +310,21 @@ void DownloadManager::finalize(Job* job, Outcome outcome, const QString& message
 
 void DownloadManager::cancel(qint64 videoPk)
 {
-    if (Job* job = m_active.value(videoPk, nullptr)) {
+    if (Job *job = m_active.value(videoPk, nullptr)) {
         job->cancelled = true;
-        if (job->process)
-            job->process->kill();
+        if (job->process) {
+            // Ask first, force second. A hard kill mid-fragment can leave the
+            // partial file and yt-dlp's resume state disagreeing about how many
+            // bytes are valid, and a later --continue then resumes from the
+            // wrong offset - which shows up as corrupt audio or video in the
+            // finished file rather than as a failed download.
+            job->process->terminate();
+            QPointer<QProcess> handle = job->process;
+            QTimer::singleShot(kTerminateGraceMs, this, [handle] {
+                if (handle && handle->state() != QProcess::NotRunning)
+                    handle->kill();
+            });
+        }
         // handleFinished sees the flag and reports a cancellation, not a failure.
         return;
     }
@@ -309,7 +332,7 @@ void DownloadManager::cancel(qint64 videoPk)
     // Still waiting: drop it from the queue without touching the process pool.
     for (int i = 0; i < m_queue.size(); ++i) {
         if (m_queue.at(i)->video.pk == videoPk) {
-            Job* job = m_queue.at(i);
+            Job *job = m_queue.at(i);
             m_queue.removeAt(i);
             m_pendingByPk.remove(videoPk);
             delete job;
@@ -326,10 +349,10 @@ void DownloadManager::cancelAll()
 {
     const QList<qint64> waiting = [this] {
         QList<qint64> ids;
-        for (Job* j : m_queue)
+        for (Job *j : m_queue)
             ids << j->video.pk;
         return ids;
-        }();
+    }();
     for (qint64 pk : waiting)
         cancel(pk);
 
@@ -342,9 +365,9 @@ QVector<DownloadManager::Progress> DownloadManager::snapshot() const
 {
     QVector<Progress> out;
     out.reserve(m_active.size() + m_queue.size());
-    for (Job* j : m_active)
+    for (Job *j : m_active)
         out.append(j->progress);
-    for (Job* j : m_queue)
+    for (Job *j : m_queue)
         out.append(j->progress);
     return out;
 }

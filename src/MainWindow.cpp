@@ -5,6 +5,7 @@
 #include "Theme.h"
 #include "ThumbnailCache.h"
 #include "VideoCardDelegate.h"
+#include "VideoDetailsDialog.h"
 #include "VideoModel.h"
 #include "YtDlp.h"
 
@@ -791,6 +792,7 @@ void MainWindow::onVideoContextMenu(const QPoint &pos)
     const QString videoId = proxyIndex.data(VideoModel::VideoIdRole).toString();
 
     QMenu menu(this);
+    menu.setToolTipsVisible(true);
     QAction *downloadAction = menu.addAction(tr("Download now"));
     downloadAction->setEnabled(state != DownloadState::Downloaded &&
                                state != DownloadState::Downloading);
@@ -800,6 +802,28 @@ void MainWindow::onVideoContextMenu(const QPoint &pos)
 
     QAction *revealAction = menu.addAction(tr("Show the containing folder"));
     revealAction->setEnabled(playAction->isEnabled());
+
+    menu.addSeparator();
+
+    const VideoInfo details = m_db.video(pk);
+
+    QAction *descriptionAction = menu.addAction(tr("View description"));
+    descriptionAction->setEnabled(VideoDetailsDialog::descriptionAvailable(details));
+    if (!descriptionAction->isEnabled()) {
+        descriptionAction->setToolTip(
+            tr("No description was saved. Download the video with Description "
+               "enabled under Preferences."));
+    }
+
+    QAction *commentsAction = menu.addAction(tr("View comments"));
+    // Enabled whenever metadata exists: whether it actually contains comments
+    // is only knowable by parsing it, which is too slow to do while building a
+    // menu. The dialog explains the difference.
+    commentsAction->setEnabled(VideoDetailsDialog::infoJsonAvailable(details));
+    if (!commentsAction->isEnabled()) {
+        commentsAction->setToolTip(
+            tr("No metadata file was saved for this video."));
+    }
 
     menu.addSeparator();
     QAction *browserAction = menu.addAction(tr("Open on YouTube"));
@@ -823,6 +847,11 @@ void MainWindow::onVideoContextMenu(const QPoint &pos)
         QDesktopServices::openUrl(QUrl::fromLocalFile(filePath));
     } else if (chosen == revealAction) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(filePath).absolutePath()));
+    } else if (chosen == descriptionAction) {
+        // Modeless, so several can be compared side by side while browsing.
+        (new VideoDetailsDialog(details, VideoDetailsDialog::Page::Description, this))->show();
+    } else if (chosen == commentsAction) {
+        (new VideoDetailsDialog(details, VideoDetailsDialog::Page::Comments, this))->show();
     } else if (chosen == browserAction) {
         QDesktopServices::openUrl(
             QUrl(QStringLiteral("https://www.youtube.com/watch?v=") + videoId));

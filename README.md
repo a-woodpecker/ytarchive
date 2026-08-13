@@ -17,6 +17,7 @@ program is the catalog, the interface and the archival discipline around it.
 - Concurrent downloads with live progress, speed and ETA; cancel one or all
 - Left navigation panel listing every channel in the catalog
 - Search and filter by archive state
+- View a downloaded video's description and threaded comments from its context menu
 - Dark and light themes, switchable without restarting
 - Saves sidecar metadata: `.info.json`, thumbnail, description, subtitles, optionally comments
 
@@ -402,6 +403,7 @@ canvas, so a light version would vanish against pale thumbnails.
 | `ThumbnailCache.*` | memory and disk thumbnail cache, deduplicated fetches |
 | `UpdateChecker.*` | GitHub Releases polling and version comparison |
 | `PreferencesDialog.*` | settings UI |
+| `VideoDetailsDialog.*` | description and comment viewer, read from sidecars |
 | `Settings.*` | persistence, installer handoff |
 | `Theme.*` | both colour schemes, and everything the cards paint |
 | `FileTime.*` | cross-platform timestamp stamping |
@@ -409,6 +411,7 @@ canvas, so a light version would vanish against pale thumbnails.
 | `resources/` | stylesheets, icon, desktop entry |
 | `packaging/` | Inno Setup script, build scripts, `.deb` packaging |
 | `tools/verify-tree.ps1` | checks the repository layout against git |
+| `tools/check-audio.sh` | decodes archived files to find corrupt or truncated audio |
 
 ## Behaviour worth knowing
 
@@ -422,9 +425,41 @@ canvas, so a light version would vanish against pale thumbnails.
   *Cancel all*.
 - **Cancelling is not failing.** Cancelled downloads return to "not downloaded"
   rather than being badged as errors.
-- Comments are off by default; they add minutes per video.
+- Comments are off by default; they add minutes per video. Right-click a
+  downloaded video for *View description* or *View comments*; both read the
+  sidecar files, so nothing is fetched and a video downloaded without comments
+  says so rather than failing silently.
 - Cookie options exist for material your own account can see - age-restricted,
   unlisted, memberships - but an anonymous visitor cannot.
+
+## If the audio cuts out
+
+Merged files combine a separate video stream and audio stream, so a defect can
+come from three places. This tells them apart:
+
+```bash
+./tools/check-audio.sh ~/Videos/Archive
+```
+
+It decodes each file to null - exercising the whole stream without writing
+anything - and separately measures how far the audio actually runs against the
+container length, which catches audio that stops early without erroring.
+
+- **Decode errors** mean the file is genuinely damaged. Re-download it.
+- **"audio runs Ns, container Ms"** means the audio stream is short. Re-download.
+- **Everything reports ok** but it still sounds wrong: the file is fine and the
+  problem is playback. Opus audio in Matroska trips up some players; try mpv or
+  VLC before suspecting the download.
+
+A damaged file is most often the result of an interrupted download resuming
+badly. Delete the affected `.mkv` **and** the channel's `.incomplete` folder
+before retrying, because a stale partial file is what a retry would resume
+from. Note that *Forget the downloaded copy* clears the catalog entry but
+leaves the file on disk, so remove it yourself.
+
+Livestream VODs sometimes contain genuine gaps in the source. If a
+re-download reproduces the same gap at the same timestamp, it is in the
+original.
 
 ## Known limitations
 
@@ -477,6 +512,9 @@ Worth reading before trusting this with an archive you care about.
   display can show the previous day.
 
 **Interface**
+- The comment viewer renders at most 3000 comments in one pass; the filter
+  narrows a larger set. Threads are indented one level, so a reply to a reply
+  is shown at the same depth as its parent.
 - Checkboxes respond only to a click on the box itself; no keyboard toggle, no
   shift-click ranges.
 - No overall queue progress, only per-video.
