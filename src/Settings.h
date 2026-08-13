@@ -9,6 +9,11 @@ struct Settings {
     QString ytDlpPath = QStringLiteral("yt-dlp");
     QString ffmpegPath;             // optional; passed to yt-dlp via --ffmpeg-location
 
+    // Passed to yt-dlp as --js-runtimes RUNTIME[:PATH]. Recent yt-dlp needs a
+    // JavaScript runtime to solve the service's challenges; only deno is
+    // enabled by default, so anything else has to be named explicitly.
+    QString jsRuntimes;
+
     // Download behaviour
     int     maxConcurrent = 2;
     QString formatSelector = QStringLiteral("bv*+ba/b");

@@ -71,6 +71,18 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
                          withBrowseButton(m_ffmpegPath, this, "Browse…",
                                           [this] { browseForFile(m_ffmpegPath, tr("Locate ffmpeg")); }));
 
+    m_jsRuntimes = new QLineEdit(current.jsRuntimes, this);
+    m_jsRuntimes->setPlaceholderText(tr("Leave empty for deno, or e.g. node, bun, node:/usr/bin/node"));
+    locationForm->addRow(tr("JavaScript runtime"), m_jsRuntimes);
+
+    auto *runtimeNote = new QLabel(
+        tr("yt-dlp needs a JavaScript runtime to sign media URLs. Without one, "
+           "listings work but downloads fail with HTTP 403. Only <b>deno</b> is used "
+           "automatically; name any other runtime here."), this);
+    runtimeNote->setWordWrap(true);
+    runtimeNote->setObjectName(QStringLiteral("hint"));
+    locationForm->addRow(QString(), runtimeNote);
+
     m_theme = new QComboBox(this);
     m_theme->addItem(tr("Dark"),  QStringLiteral("dark"));
     m_theme->addItem(tr("Light"), QStringLiteral("light"));
@@ -227,6 +239,7 @@ Settings PreferencesDialog::result() const
     s.archiveRoot       = m_archiveRoot->text().trimmed();
     s.ytDlpPath         = m_ytDlpPath->text().trimmed();
     s.ffmpegPath        = m_ffmpegPath->text().trimmed();
+    s.jsRuntimes        = m_jsRuntimes->text().trimmed();
     s.formatSelector    = m_format->currentText().trimmed();
     s.mergeContainer    = m_container->currentText().trimmed();
     s.maxConcurrent     = m_concurrency->value();

@@ -15,10 +15,12 @@ program is the catalog, the interface and the archival discipline around it.
 - Card grid with thumbnails, durations, dates, view counts and per-video state
 - Per-video checkboxes, plus *select all*, *select not archived*, *download everything missing*
 - Concurrent downloads with live progress, speed and ETA; cancel one or all
+- Retry a single failed video, or every failure in the current view at once
 - Left navigation panel listing every channel in the catalog
 - Search and filter by archive state
 - View a downloaded video's description and threaded comments from its context menu
 - Dark and light themes, switchable without restarting
+- Resizable panels; **View** toggles each one and resets the layout
 - Saves sidecar metadata: `.info.json`, thumbnail, description, subtitles, optionally comments
 
 ## How the archive is laid out
@@ -71,9 +73,25 @@ directory listing.
 | CMake 3.19+ and a C++17 compiler | build |
 | **yt-dlp** | all interaction with the video service |
 | **ffmpeg** (with `ffprobe`) | merging separate video and audio streams |
+| **A JavaScript runtime** | yt-dlp needs one to sign media URLs |
 
 yt-dlp and ffmpeg are runtime dependencies invoked as subprocesses. If they
 aren't on `PATH`, set their full paths in **File > Preferences > Locations**.
+
+**A JavaScript runtime is required, and it is a separate program from yt-dlp.**
+Recent yt-dlp needs one to solve the service's challenges. Without it, channel
+listings work normally and every download fails with HTTP 403 - a confusing
+split, because the application looks healthy right up to the moment it saves
+anything. Only `deno` is used automatically; any other runtime must be named
+under **Preferences > Locations > JavaScript runtime**.
+
+```bash
+curl -fsSL https://deno.land/install.sh | sh     # recommended, no extra config
+sudo apt install nodejs                          # then set the runtime to "node"
+```
+
+The application checks for one at startup and warns in the Output tab if none
+is found, or if one is present but is not deno and so would be ignored.
 
 **Install yt-dlp yourself rather than from a distribution package.** Packaged
 versions lag badly, and a stale yt-dlp fails against the service in ways that
@@ -425,12 +443,57 @@ canvas, so a light version would vanish against pale thumbnails.
   *Cancel all*.
 - **Cancelling is not failing.** Cancelled downloads return to "not downloaded"
   rather than being badged as errors.
+- **Retrying.** A failed card's context menu reads *Retry download*, with the
+  previous error as its tooltip. **Retry failed (N)** in the toolbar appears
+  only when the current view holds failures and requeues all of them; it also
+  picks up videos badged *File missing*. The stored error is cleared first, so
+  a card that fails again shows the new reason rather than the old one.
 - Comments are off by default; they add minutes per video. Right-click a
   downloaded video for *View description* or *View comments*; both read the
   sidecar files, so nothing is fetched and a video downloaded without comments
   says so rather than failing silently.
 - Cookie options exist for material your own account can see - age-restricted,
   unlisted, memberships - but an anonymous visitor cannot.
+
+## Panels
+
+The Channels, Downloads and Output panels are dock widgets. Drag the separator
+between a panel and the grid to resize it - the separator is deliberately 7px
+wide, because Qt uses the stylesheet's `width`/`height` on
+`QMainWindow::separator` as the real hit area and a hairline is almost
+impossible to grab. It highlights on hover.
+
+**View** toggles each panel and offers *Reset panel layout*, which restores the
+arrangement the application ships with. Layout is otherwise remembered between
+sessions, so a panel resized once stays that way.
+
+Downloads and Output are tabbed together at the bottom; click a tab to switch.
+
+## If downloads fail with HTTP 403
+
+A 403 means the media URL was refused. It does **not** mean the video is
+unavailable - the listing worked, so the service is reachable and the video
+exists. In rough order of likelihood:
+
+1. **No JavaScript runtime.** Check with
+   `yt-dlp -v "<any video URL>" 2>&1 | grep -i "JS runtimes"`. If it reports
+   `none`, that is the cause: install deno, or name another runtime in
+   Preferences. Updating yt-dlp does not help, because the runtime is a
+   separate program.
+2. **yt-dlp is out of date.** The other common cause. The service changes
+   how it signs media URLs specifically to break automated downloaders, and
+   distribution packages lag badly. `yt-dlp --update-to nightly`, or
+   `pipx upgrade yt-dlp`. The application reports the version and its age in the
+   Output tab at startup and warns when it is more than a month old.
+3. **Cookies.** Counter-intuitively, passing cookies can make formats
+   *unavailable*. If nothing you archive needs an account, clear both cookie
+   fields under Preferences > Access.
+4. **Rate limiting.** Real, but usually secondary. If 403s appear only after a
+   long queue has been running, reduce *Simultaneous downloads* to 1 and set a
+   speed limit under Preferences > Downloading.
+
+The first 403 in a session writes this list to the Output tab, so it is to hand
+when it happens.
 
 ## If the audio cuts out
 
@@ -497,8 +560,9 @@ Worth reading before trusting this with an archive you care about.
 
 **Dependency on yt-dlp**
 - Every listing and download shells out to yt-dlp. If the service changes and
-  your yt-dlp is stale, everything fails at once with opaque errors. There is no
-  version check - update it regularly and independently.
+  your yt-dlp is stale, everything fails at once. The version and its age are
+  reported at startup and a warning is shown past 30 days, but updating is
+  still yours to do.
 - `--extractor-args youtubetab:approximate_date` is extractor-specific and may
   change or disappear.
 - Error text is extracted heuristically from the last `ERROR:` line of stderr.

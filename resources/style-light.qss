@@ -8,10 +8,15 @@ QWidget {
     font-size: 13px;
 }
 
+/* See style.qss: these dimensions are the drag hit area, not just decoration. */
 QMainWindow::separator {
-    background: #e0e0e0;
-    width: 1px;
-    height: 1px;
+    background: #ededed;
+    width: 7px;
+    height: 7px;
+}
+
+QMainWindow::separator:hover {
+    background: #cc0000;
 }
 
 /* ---- navigation panel ---- */

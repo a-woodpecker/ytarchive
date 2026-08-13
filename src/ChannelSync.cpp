@@ -5,7 +5,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-ChannelSync::ChannelSync(QObject* parent)
+ChannelSync::ChannelSync(QObject *parent)
     : QObject(parent)
 {
 }
@@ -19,7 +19,7 @@ ChannelSync::~ChannelSync()
     }
 }
 
-void ChannelSync::start(const QString& input)
+void ChannelSync::start(const QString &input)
 {
     if (isRunning()) {
         emit failed(tr("A channel sync is already running."));
@@ -29,7 +29,7 @@ void ChannelSync::start(const QString& input)
     m_url = YtDlp::normalizeChannelUrl(input);
     if (m_url.isEmpty()) {
         emit failed(tr("That does not look like a YouTube channel. Try a handle such as "
-            "@channelname, or a full channel URL."));
+                       "@channelname, or a full channel URL."));
         return;
     }
 
@@ -44,23 +44,23 @@ void ChannelSync::start(const QString& input)
     startProbe();
 }
 
-QProcess* ChannelSync::makeProcess()
+QProcess *ChannelSync::makeProcess()
 {
-    auto* proc = new QProcess(this);
+    auto *proc = new QProcess(this);
     proc->setProgram(m_settings.ytDlpPath);
 
     connect(proc, &QProcess::readyReadStandardError, this, [this] {
         if (m_process)
             m_stderr += m_process->readAllStandardError();
-        });
+    });
     connect(proc, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
         if (e != QProcess::FailedToStart)
             return;
         const QString path = m_settings.ytDlpPath;
         teardown();
         emit failed(tr("Could not run yt-dlp (looked for \"%1\"). Install it, or set its "
-            "full path in Preferences.").arg(path));
-        });
+                       "full path in Preferences.").arg(path));
+    });
     return proc;
 }
 
@@ -71,13 +71,13 @@ void ChannelSync::startProbe()
     m_stage = Stage::Probing;
 
     m_process = makeProcess();
-    m_process->setArguments(YtDlp::channelProbeArgs(m_url));
+    m_process->setArguments(YtDlp::channelProbeArgs(m_url, m_settings));
 
     connect(m_process, &QProcess::readyReadStandardOutput, this, [this] {
         m_probeStdout += m_process->readAllStandardOutput();
-        });
+    });
     connect(m_process, &QProcess::finished, this,
-        [this](int code, QProcess::ExitStatus) { handleProbeFinished(code); });
+            [this](int code, QProcess::ExitStatus) { handleProbeFinished(code); });
 
     emit statusChanged(tr("Contacting channel…"));
     emit progress(0, -1);
@@ -120,16 +120,16 @@ void ChannelSync::startListing()
     m_stderr.clear();
 
     m_process = makeProcess();
-    m_process->setArguments(YtDlp::channelListArgs(m_url));
+    m_process->setArguments(YtDlp::channelListArgs(m_url, m_settings));
 
     connect(m_process, &QProcess::readyReadStandardOutput,
-        this, &ChannelSync::handleListingReadyRead);
+            this, &ChannelSync::handleListingReadyRead);
     connect(m_process, &QProcess::finished, this,
-        [this](int code, QProcess::ExitStatus) { handleListingFinished(code); });
+            [this](int code, QProcess::ExitStatus) { handleListingFinished(code); });
 
     emit statusChanged(m_channel.title.isEmpty()
-        ? tr("Loading video list…")
-        : tr("Loading videos from %1…").arg(m_channel.title));
+                           ? tr("Loading video list…")
+                           : tr("Loading videos from %1…").arg(m_channel.title));
     emit progress(0, m_expectedTotal);
     m_process->start();
 }
@@ -153,7 +153,7 @@ void ChannelSync::handleListingReadyRead()
     emit progress(m_videos.size(), m_expectedTotal);
 }
 
-void ChannelSync::consumeEntryLine(const QByteArray& line)
+void ChannelSync::consumeEntryLine(const QByteArray &line)
 {
     const QByteArray trimmed = line.trimmed();
     if (trimmed.isEmpty() || !trimmed.startsWith('{'))

@@ -37,6 +37,7 @@ Settings Settings::load()
     v.archiveRoot       = s.value("archiveRoot", defaultArchiveRoot()).toString();
     v.ytDlpPath         = s.value("ytDlpPath", v.ytDlpPath).toString();
     v.ffmpegPath        = s.value("ffmpegPath").toString();
+    v.jsRuntimes        = s.value("jsRuntimes").toString();
     v.maxConcurrent     = s.value("maxConcurrent", v.maxConcurrent).toInt();
     v.formatSelector    = s.value("formatSelector", v.formatSelector).toString();
     v.mergeContainer    = s.value("mergeContainer", v.mergeContainer).toString();
@@ -67,6 +68,7 @@ void Settings::save() const
     s.setValue("archiveRoot", archiveRoot);
     s.setValue("ytDlpPath", ytDlpPath);
     s.setValue("ffmpegPath", ffmpegPath);
+    s.setValue("jsRuntimes", jsRuntimes);
     s.setValue("maxConcurrent", maxConcurrent);
     s.setValue("formatSelector", formatSelector);
     s.setValue("mergeContainer", mergeContainer);

@@ -7,10 +7,18 @@ QWidget {
     font-size: 13px;
 }
 
+/* This is the drag handle between the docks and the grid. Qt uses these
+   dimensions as the real hit area, so a 1px separator looks tidy and is
+   almost impossible to grab. 7px is comfortable to hit; the colour keeps it
+   reading as a gap rather than a bar. */
 QMainWindow::separator {
-    background: #272727;
-    width: 1px;
-    height: 1px;
+    background: #1b1b1b;
+    width: 7px;
+    height: 7px;
+}
+
+QMainWindow::separator:hover {
+    background: #cc0000;
 }
 
 /* ---- navigation panel ---- */

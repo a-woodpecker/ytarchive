@@ -33,6 +33,7 @@
 #include <QPushButton>
 #include <QScrollBar>
 #include <QSettings>
+#include <QStandardPaths>
 #include <QStatusBar>
 #include <QTimer>
 #include <QToolButton>
@@ -119,9 +120,27 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_downloads, &DownloadManager::videoFinished, this,
             [this](qint64 pk, bool ok, const QString &message) {
                 m_downloadsPanel->onFinished(pk, ok, message);
+
+                if (!ok && !m_forbiddenHintShown
+                    && message.contains(QStringLiteral("403"))) {
+                    m_forbiddenHintShown = true;
+                    m_log->appendPlainText(tr(
+                        "\nA 403 means the media URL was refused, not that the video is "
+                        "unavailable. In order of likelihood:\n"
+                        "  1. yt-dlp is out of date. Update it, and prefer the nightly "
+                        "channel: yt-dlp --update-to nightly\n"
+                        "  2. No JavaScript runtime is installed. Recent yt-dlp needs one "
+                        "(deno, node, bun or qjs) to sign media URLs. Install deno, or "
+                        "name another under Preferences > Locations.\n"
+                        "  3. Cookies are configured. They can make formats unavailable; "
+                        "try clearing them in Preferences > Access.\n"
+                        "  4. Rate limiting. Reduce simultaneous downloads to 1 and set a "
+                        "speed limit in Preferences > Downloading.\n"));
+                }
                 if (ok)
                     m_model->refreshVideo(m_db.video(pk));
                 updateCounters();
+                updateRetryButton();
                 reloadChannels(currentChannelPk());
             });
     connect(m_downloads, &DownloadManager::logMessage, this, [this](const QString &line) {
@@ -195,6 +214,8 @@ MainWindow::MainWindow(QWidget *parent)
                "See the Output tab."), 15000);
     }
 
+    m_defaultState = saveState();
+
     QSettings ui;
     const QByteArray savedGeometry = ui.value(QStringLiteral("window/geometry")).toByteArray();
     const QByteArray savedState    = ui.value(QStringLiteral("window/state")).toByteArray();
@@ -214,15 +235,15 @@ MainWindow::MainWindow(QWidget *parent)
         // First run: the grid is the main event, the transfer list needs a few
         // rows. Deferred, because resizing docks mid-construction leaves the
         // layout settling while the first paint is already happening.
-        QTimer::singleShot(0, this, [this] {
-            resizeDocks({ m_downloadsDock }, { 200 }, Qt::Vertical);
-        });
+        QTimer::singleShot(0, this, [this] { applyDefaultDockSizes(); });
     }
 
     // At most one background check per day, and never before the window is up.
     const qint64 dayAgo = QDateTime::currentSecsSinceEpoch() - 24 * 60 * 60;
     if (m_settings.checkUpdatesOnStartup && m_settings.lastUpdateCheck < dayAgo)
         QTimer::singleShot(2500, this, [this] { m_updates->check(false); });
+
+    QTimer::singleShot(1200, this, &MainWindow::checkYtDlpVersion);
 }
 
 MainWindow::~MainWindow() = default;
@@ -232,7 +253,8 @@ void MainWindow::buildUi()
     setWindowTitle(tr("YT Archive"));
 
     // ---- navigation panel -------------------------------------------------
-    auto *navDock = new QDockWidget(tr("Channels"), this);
+    m_navDock = new QDockWidget(tr("Channels"), this);
+    QDockWidget *navDock = m_navDock;
     navDock->setObjectName(QStringLiteral("navDock"));
     navDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
     navDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
@@ -381,6 +403,14 @@ void MainWindow::buildUi()
     connect(m_downloadButton, &QPushButton::clicked, this, &MainWindow::downloadChecked);
     barLayout->addWidget(m_downloadButton);
 
+    m_retryFailedButton = new QPushButton(tr("Retry failed"), bar);
+    m_retryFailedButton->setToolTip(
+        tr("Queue every video in this view that failed, or whose file has gone missing."));
+    m_retryFailedButton->hide();   // shown only when there is something to retry
+    connect(m_retryFailedButton, &QPushButton::clicked, this,
+            &MainWindow::retryFailedDownloads);
+    barLayout->addWidget(m_retryFailedButton);
+
     m_downloadAllButton = new QPushButton(tr("Download everything missing"), bar);
     connect(m_downloadAllButton, &QPushButton::clicked, this,
             &MainWindow::downloadEverythingMissing);
@@ -424,7 +454,8 @@ void MainWindow::buildUi()
     m_downloadsDock->setWidget(m_downloadsPanel);
     addDockWidget(Qt::BottomDockWidgetArea, m_downloadsDock);
 
-    auto *logDock = new QDockWidget(tr("Output"), this);
+    m_logDock = new QDockWidget(tr("Output"), this);
+    QDockWidget *logDock = m_logDock;
     logDock->setObjectName(QStringLiteral("logDock"));
     m_log = new QPlainTextEdit(logDock);
     m_log->setReadOnly(true);
@@ -461,10 +492,20 @@ void MainWindow::buildActions()
                             this, &MainWindow::downloadChecked);
     downloadMenu->addAction(tr("Download everything &missing"), this,
                             &MainWindow::downloadEverythingMissing);
+    downloadMenu->addAction(tr("&Retry failed downloads"),
+                            QKeySequence(QStringLiteral("Ctrl+Shift+R")),
+                            this, &MainWindow::retryFailedDownloads);
     downloadMenu->addSeparator();
     downloadMenu->addAction(tr("&Cancel all downloads"),
                             QKeySequence(QStringLiteral("Ctrl+Shift+X")),
                             this, &MainWindow::cancelAllDownloads);
+
+    QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
+    viewMenu->addAction(m_navDock->toggleViewAction());
+    viewMenu->addAction(m_downloadsDock->toggleViewAction());
+    viewMenu->addAction(m_logDock->toggleViewAction());
+    viewMenu->addSeparator();
+    viewMenu->addAction(tr("&Reset panel layout"), this, &MainWindow::resetLayout);
 
     QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
     helpMenu->addAction(tr("Check for &updates…"), this, &MainWindow::checkForUpdates);
@@ -556,6 +597,7 @@ void MainWindow::onChannelSelectionChanged()
 {
     reloadVideos();
     updateCounters();
+    updateRetryButton();
 }
 
 void MainWindow::reloadVideos()
@@ -756,6 +798,41 @@ void MainWindow::downloadChecked()
     enqueue(m_model->checkedVideos());
 }
 
+void MainWindow::updateRetryButton()
+{
+    if (!m_retryFailedButton)
+        return;
+
+    int failed = 0;
+    for (const VideoInfo &v : m_model->allVideos())
+        if (v.state == DownloadState::Failed || v.state == DownloadState::Missing)
+            ++failed;
+
+    m_retryFailedButton->setVisible(failed > 0);
+    m_retryFailedButton->setText(tr("Retry failed (%1)").arg(failed));
+}
+
+void MainWindow::retryFailedDownloads()
+{
+    QVector<VideoInfo> failed;
+    for (const VideoInfo &v : m_model->allVideos())
+        if (v.state == DownloadState::Failed || v.state == DownloadState::Missing)
+            failed.append(v);
+
+    if (failed.isEmpty()) {
+        statusBar()->showMessage(tr("Nothing has failed in this view."), 5000);
+        return;
+    }
+
+    // Clear the previous error before requeueing, so a card that fails again
+    // shows the new reason rather than the stale one.
+    for (const VideoInfo &v : failed)
+        m_db.setVideoState(v.pk, DownloadState::NotDownloaded);
+
+    m_log->appendPlainText(tr("Retrying %n failed download(s).", "", failed.size()));
+    enqueue(failed);
+}
+
 void MainWindow::downloadEverythingMissing()
 {
     QVector<VideoInfo> missing;
@@ -793,9 +870,17 @@ void MainWindow::onVideoContextMenu(const QPoint &pos)
 
     QMenu menu(this);
     menu.setToolTipsVisible(true);
-    QAction *downloadAction = menu.addAction(tr("Download now"));
+    const bool hasFailed = state == DownloadState::Failed
+                           || state == DownloadState::Missing;
+    QAction *downloadAction = menu.addAction(hasFailed ? tr("Retry download")
+                                                       : tr("Download now"));
     downloadAction->setEnabled(state != DownloadState::Downloaded &&
                                state != DownloadState::Downloading);
+    if (hasFailed) {
+        const QString reason = proxyIndex.data(VideoModel::ErrorRole).toString();
+        if (!reason.isEmpty())
+            downloadAction->setToolTip(tr("Last attempt: %1").arg(reason));
+    }
 
     QAction *playAction = menu.addAction(tr("Open the archived file"));
     playAction->setEnabled(!filePath.isEmpty() && QFileInfo::exists(filePath));
@@ -861,6 +946,7 @@ void MainWindow::onVideoContextMenu(const QPoint &pos)
         m_db.clearDownload(pk);
         m_model->refreshVideo(m_db.video(pk));
         updateCounters();
+        updateRetryButton();
     }
 }
 
@@ -887,6 +973,84 @@ void MainWindow::cancelAllDownloads()
     statusBar()->showMessage(
         tr("Cancelled %n download(s). Partly downloaded files are kept and resume "
            "next time.", "", pending), 8000);
+}
+
+void MainWindow::checkYtDlpVersion()
+{
+    auto *proc = new QProcess(this);
+    proc->setProgram(m_settings.ytDlpPath);
+    proc->setArguments({ QStringLiteral("--version") });
+
+    connect(proc, &QProcess::errorOccurred, this, [this, proc](QProcess::ProcessError e) {
+        if (e == QProcess::FailedToStart) {
+            m_log->appendPlainText(
+                tr("yt-dlp was not found at \"%1\". Nothing can be listed or downloaded "
+                   "until it is installed or its path is set in Preferences.")
+                    .arg(m_settings.ytDlpPath));
+        }
+        proc->deleteLater();
+    });
+
+    connect(proc, &QProcess::finished, this, [this, proc](int, QProcess::ExitStatus) {
+        const QString version = QString::fromUtf8(proc->readAllStandardOutput()).trimmed();
+        proc->deleteLater();
+        if (version.isEmpty())
+            return;
+
+        m_log->appendPlainText(tr("yt-dlp %1").arg(version));
+
+        // A JS runtime is a separate binary, so updating yt-dlp does nothing
+        // for it. Without one, listings succeed and every download 403s.
+        if (m_settings.jsRuntimes.trimmed().isEmpty()) {
+            static const QStringList runtimes{ QStringLiteral("deno"),
+                                               QStringLiteral("node"),
+                                               QStringLiteral("bun"),
+                                               QStringLiteral("qjs") };
+            QStringList found;
+            for (const QString &r : runtimes) {
+                if (!QStandardPaths::findExecutable(r).isEmpty())
+                    found << r;
+            }
+            if (found.isEmpty()) {
+                m_log->appendPlainText(tr(
+                    "No JavaScript runtime found (deno, node, bun or qjs). yt-dlp needs "
+                    "one to sign media URLs: listings will work but downloads will fail "
+                    "with HTTP 403. Install deno, or install another and name it under "
+                    "Preferences > Locations > JavaScript runtime."));
+                statusBar()->showMessage(
+                    tr("No JavaScript runtime found; downloads are likely to fail. "
+                       "See the Output tab."), 20000);
+            } else if (!found.contains(QStringLiteral("deno"))) {
+                // Present but not the default, so yt-dlp will ignore it.
+                m_log->appendPlainText(tr(
+                    "Found %1, but yt-dlp only uses deno automatically. Set "
+                    "Preferences > Locations > JavaScript runtime to \"%2\" so it "
+                    "is actually used.").arg(found.join(QStringLiteral(", ")),
+                                             found.first()));
+            }
+        }
+
+        // Releases are dated, so staleness is directly measurable. An old
+        // yt-dlp is the most common cause of downloads failing with 403.
+        const QDate released = QDate::fromString(version.left(10),
+                                                 QStringLiteral("yyyy.MM.dd"));
+        if (!released.isValid())
+            return;
+
+        const qint64 age = released.daysTo(QDate::currentDate());
+        if (age > 30) {
+            const QString warning =
+                tr("That copy of yt-dlp is %n day(s) old. The service changes often, and a "
+                   "stale yt-dlp fails in ways that look like faults in this program - "
+                   "most commonly HTTP 403. Update it.", "", static_cast<int>(age));
+            m_log->appendPlainText(warning);
+            statusBar()->showMessage(
+                tr("yt-dlp is %n day(s) old; consider updating it. See the Output tab.",
+                   "", static_cast<int>(age)), 15000);
+        }
+    });
+
+    proc->start();
 }
 
 void MainWindow::checkForUpdates()
@@ -1055,6 +1219,22 @@ void MainWindow::setBusy(bool busy, const QString &message)
 
 // QWidget::update() does not recurse into children, so each one is asked
 // directly. Cheap: it marks widgets dirty, it does not paint synchronously.
+void MainWindow::applyDefaultDockSizes()
+{
+    // Tall enough for roughly half a dozen transfers, which is the point at
+    // which the queue becomes readable rather than a peephole.
+    resizeDocks({ m_downloadsDock }, { 300 }, Qt::Vertical);
+    resizeDocks({ m_navDock }, { 260 }, Qt::Horizontal);
+}
+
+void MainWindow::resetLayout()
+{
+    if (!m_defaultState.isEmpty())
+        restoreState(m_defaultState);
+    applyDefaultDockSizes();
+    repaintAll();
+}
+
 void MainWindow::repaintAll()
 {
     const QList<QWidget *> children = findChildren<QWidget *>();

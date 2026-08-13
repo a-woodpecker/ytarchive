@@ -26,6 +26,7 @@ private:
     QLineEdit *m_archiveRoot;
     QLineEdit *m_ytDlpPath;
     QLineEdit *m_ffmpegPath;
+    QLineEdit *m_jsRuntimes;
     QLineEdit *m_cookiesBrowser;
     QLineEdit *m_cookiesFile;
     QLineEdit *m_filenameTemplate;
