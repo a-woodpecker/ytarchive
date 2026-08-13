@@ -2,6 +2,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QProcess>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -63,6 +64,15 @@ void appendPacingArgs(QStringList &args, const Settings &s)
     }
 }
 
+// Whatever the user typed, parsed the way a shell would so quoted values with
+// spaces survive.
+void appendExtraArgs(QStringList &args, const Settings &s)
+{
+    const QString extra = s.extraArguments.trimmed();
+    if (!extra.isEmpty())
+        args << QProcess::splitCommand(extra);
+}
+
 void appendAuthArgs(QStringList &args, const Settings &s)
 {
     if (!s.cookiesFromBrowser.isEmpty())
@@ -98,6 +108,17 @@ QString bestThumbnail(const QJsonObject &obj)
 
 } // namespace
 
+QStringList listFormatsArgs(const QString &videoUrl, const Settings &settings)
+{
+    QStringList args = baseArgs(settings);
+    appendRuntimeArgs(args, settings);
+    appendExtractorArgs(args, settings);
+    appendAuthArgs(args, settings);
+    appendExtraArgs(args, settings);
+    args << QStringLiteral("--list-formats") << videoUrl;
+    return args;
+}
+
 QStringList channelProbeArgs(const QString &channelUrl, const Settings &settings)
 {
     QStringList args = baseArgs(settings);
@@ -131,7 +152,8 @@ QStringList channelListArgs(const QString &channelUrl, const Settings &settings)
 QStringList downloadArgs(const VideoInfo &video,
                          const QString &destinationDir,
                          const QString &printFile,
-                         const Settings &settings)
+                         const Settings &settings,
+                         bool withCookies)
 {
     QStringList args = baseArgs(settings);
 
@@ -174,7 +196,12 @@ QStringList downloadArgs(const VideoInfo &video,
     appendRuntimeArgs(args, settings);
     appendExtractorArgs(args, settings);
     appendPacingArgs(args, settings);
-    appendAuthArgs(args, settings);
+    // Cookies are the caller's decision, not a setting read here: sending them
+    // when they are not needed makes the service offer formats that cannot be
+    // downloaded.
+    if (withCookies)
+        appendAuthArgs(args, settings);
+    appendExtraArgs(args, settings);
 
     // Output layout: finished files in the channel folder, partial files in a
     // sibling .part directory so an interrupted run never litters the archive.
@@ -381,6 +408,28 @@ QString infoJsonPathFor(const QString &mediaPath)
     return fi.absoluteDir().filePath(fi.completeBaseName() + QStringLiteral(".info.json"));
 }
 
+bool needsAuthentication(const QString &rawError)
+{
+    const QString lower = rawError.toLower();
+    static const char *markers[] = {
+        "sign in to confirm your age", "age-restricted",
+        "join this channel", "members-only",
+        "sign in if you've been granted access",
+        "login required", "use --cookies",
+    };
+    for (const char *marker : markers)
+        if (lower.contains(QLatin1String(marker)))
+            return true;
+    return false;
+}
+
+bool formatUnavailable(const QString &rawError)
+{
+    const QString lower = rawError.toLower();
+    return lower.contains(QLatin1String("requested format is not available"))
+           || lower.contains(QLatin1String("no video formats found"));
+}
+
 QString friendlyError(const QString &rawError)
 {
     const QString lower = rawError.toLower();
@@ -422,8 +471,8 @@ QString friendlyError(const QString &rawError)
           QT_TRANSLATE_NOOP("YtDlp", "Video unavailable.") },
         { "requested format is not available",
           QT_TRANSLATE_NOOP("YtDlp",
-            "No matching format. Try a different quality in "
-            "Preferences > Downloading.") },
+            "Nothing downloadable was offered. This is usually the cost of "
+            "sending cookies; see Preferences > Access.") },
         { "no space left on device",
           QT_TRANSLATE_NOOP("YtDlp", "The disk is full.") },
         { "403",

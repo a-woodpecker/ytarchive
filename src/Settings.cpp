@@ -48,6 +48,7 @@ Settings Settings::load()
     v.sleepInterval     = s.value("sleepInterval", 0).toInt();
     v.maxSleepInterval  = s.value("maxSleepInterval", 0).toInt();
     v.extractorArgs     = s.value("extractorArgs").toString();
+    v.extraArguments    = s.value("extraArguments").toString();
     v.verboseLogging    = s.value("verboseLogging", false).toBool();
     v.autoRetryAttempts = s.value("autoRetryAttempts", v.autoRetryAttempts).toInt();
     v.autoRetryDelay    = s.value("autoRetryDelay", v.autoRetryDelay).toInt();
@@ -61,6 +62,7 @@ Settings Settings::load()
     v.embedChapters     = s.value("embedChapters", true).toBool();
     v.cookiesFromBrowser= s.value("cookiesFromBrowser").toString();
     v.cookiesFile       = s.value("cookiesFile").toString();
+    v.cookiesOnlyWhenNeeded = s.value("cookiesOnlyWhenNeeded", true).toBool();
     v.filenameTemplate  = s.value("filenameTemplate", v.filenameTemplate).toString();
     v.theme             = s.value("theme", v.theme).toString();
     v.checkUpdatesOnStartup = s.value("checkUpdatesOnStartup", true).toBool();
@@ -87,6 +89,7 @@ void Settings::save() const
     s.setValue("sleepInterval", sleepInterval);
     s.setValue("maxSleepInterval", maxSleepInterval);
     s.setValue("extractorArgs", extractorArgs);
+    s.setValue("extraArguments", extraArguments);
     s.setValue("verboseLogging", verboseLogging);
     s.setValue("autoRetryAttempts", autoRetryAttempts);
     s.setValue("autoRetryDelay", autoRetryDelay);
@@ -100,6 +103,7 @@ void Settings::save() const
     s.setValue("embedChapters", embedChapters);
     s.setValue("cookiesFromBrowser", cookiesFromBrowser);
     s.setValue("cookiesFile", cookiesFile);
+    s.setValue("cookiesOnlyWhenNeeded", cookiesOnlyWhenNeeded);
     s.setValue("filenameTemplate", filenameTemplate);
     s.setValue("theme", theme);
     s.setValue("checkUpdatesOnStartup", checkUpdatesOnStartup);

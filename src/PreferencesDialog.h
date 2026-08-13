@@ -28,6 +28,7 @@ private:
     QLineEdit *m_ffmpegPath;
     QLineEdit *m_jsRuntimes;
     QComboBox *m_cookiesBrowser;
+    QCheckBox *m_cookiesOnlyWhenNeeded;
     QLineEdit *m_cookiesFile;
     QLineEdit *m_filenameTemplate;
     QComboBox *m_format;

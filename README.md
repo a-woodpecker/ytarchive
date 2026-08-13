@@ -460,7 +460,10 @@ system*. Changes apply immediately.
 
 A theme lives in two places that must be edited together: the `.qss` files style
 everything Qt draws, while `Theme.cpp` holds the colours for everything painted
-by hand - the video cards. `VideoCardDelegate` reads those through
+by hand - the video cards, and the chevrons used by combo boxes and spin boxes.
+Those are drawn at run time into the cache directory and substituted into the
+stylesheet, so no image files are committed and their colour always matches the
+theme. `VideoCardDelegate` reads those through
 `Theme::palette()`, so a card is never left dark on a light canvas. Switching
 themes explicitly repaints the grid, because restyling alone would not.
 
@@ -559,8 +562,10 @@ this setting changes.
 
 ### Browsers yt-dlp knows by name
 
-Pick one from the list: `brave`, `chrome`, `chromium`, `edge`, `firefox`,
-`opera`, `safari`, `vivaldi`, `whale`.
+The dropdown lists every browser yt-dlp accepts: `brave`, `chrome`, `chromium`,
+`edge`, `firefox`, `opera`, `safari`, `vivaldi`, `whale`. Anything outside that
+list is rejected outright, which is why the field is a list rather than free
+text - though it stays editable for the profile forms below.
 
 For a non-default profile, add its name: `firefox:work` or `chrome:Profile 2`.
 
@@ -603,16 +608,31 @@ If the download still fails with the same message, the cookies were read but
 did not carry a signed-in session: sign in again in that exact profile, confirm
 the video plays there, close the browser, and retry.
 
+### Cookies are sent only when needed
+
+Cookies unlock age-restricted and members-only videos, but they also make the
+service offer formats that cannot be downloaded - so a video that works
+anonymously starts failing with *Requested format is not available* as soon as
+cookies are configured. Applying them to every request trades one problem for
+another.
+
+So each video is attempted **without** cookies first. If the failure says an
+account was needed, it is retried immediately with them. And if a download that
+used cookies comes back with nothing downloadable, it is retried without them.
+Each video switches at most once, in either direction, and neither switch counts
+against the automatic retry attempts - it is a different attempt, not a repeat
+of the same one.
+
+Turn this off under **Preferences > Access > Only send cookies when a video
+needs them** if you specifically want every request authenticated.
+
 ### Worth knowing
 
 - Cookies are read fresh on every download, so nothing goes stale in this
   program's settings - but the session itself expires after a couple of weeks
   of not using the browser.
-- Passing cookies can make some formats *unavailable*, so leave this off unless
-  a video needs it.
-- Everything downloaded this way is tied to your account. For an archive meant
-  to outlive the account, that is worth thinking about before enabling it
-  globally.
+- Everything downloaded with cookies is tied to your account. For an archive
+  meant to outlive the account, that is worth thinking about.
 
 ## If downloads fail with HTTP 403
 

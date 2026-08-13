@@ -74,6 +74,11 @@ void DownloadManager::enqueue(const QVector<VideoInfo> &videos,
         job->progress.videoPk = v.pk;
         job->progress.title = v.title;
         job->progress.channelTitle = channelTitle;
+        // Sending cookies to a request that does not need them makes the
+        // service offer formats that cannot be downloaded, so they are held
+        // back until a failure asks for them.
+        job->withCookies = cookiesConfigured() && !m_settings.cookiesOnlyWhenNeeded;
+
         job->progress.stage = tr("Waiting");
 
         m_queue.enqueue(job);
@@ -116,7 +121,8 @@ void DownloadManager::startJob(Job *job)
     proc->setProcessEnvironment(toolProcessEnvironment());
     proc->setProgram(m_settings.ytDlpPath);
     proc->setArguments(YtDlp::downloadArgs(job->video, job->destinationDir,
-                                           job->printFilePath, m_settings));
+                                           job->printFilePath, m_settings,
+                                           job->withCookies));
 
     job->progress.stage = tr("Starting");
     emit progress(job->progress);
@@ -239,6 +245,52 @@ bool DownloadManager::looksTransient(const QString &message)
     return false;
 }
 
+bool DownloadManager::cookiesConfigured() const
+{
+    return !m_settings.cookiesFromBrowser.trimmed().isEmpty()
+           || !m_settings.cookiesFile.trimmed().isEmpty();
+}
+
+bool DownloadManager::retryWithOppositeCookies(Job *job, const QString &reason)
+{
+    if (!cookiesConfigured() || job->cancelled || job->cookieSwitchTried)
+        return false;
+
+    const bool wantCookies = !job->withCookies && YtDlp::needsAuthentication(reason);
+    // The reverse case: cookies were sent, and the service answered with
+    // formats that cannot be fetched. That is what sending them cost.
+    const bool dropCookies = job->withCookies && YtDlp::formatUnavailable(reason);
+
+    if (!wantCookies && !dropCookies)
+        return false;
+
+    job->cookieSwitchTried = true;
+    job->withCookies = wantCookies;
+
+    if (job->process) {
+        job->process->disconnect(this);
+        job->process->deleteLater();
+        job->process = nullptr;
+    }
+    QFile::remove(job->printFilePath);
+
+    const qint64 pk = job->video.pk;
+    m_active.remove(pk);
+
+    if (m_db)
+        m_db->setVideoState(pk, DownloadState::Queued);
+    emit videoStateChanged(pk, DownloadState::Queued);
+    emit logMessage(wantCookies
+                        ? tr("\"%1\" needs an account; retrying with cookies.")
+                              .arg(job->video.title)
+                        : tr("\"%1\" offered no downloadable format with cookies; "
+                             "retrying without them.").arg(job->video.title));
+
+    m_queue.prepend(job);   // straight back to the front: nothing to wait for
+    pumpQueue();
+    return true;
+}
+
 bool DownloadManager::scheduleRetry(Job *job, const QString &reason)
 {
     if (m_settings.autoRetryAttempts <= 0 || job->cancelled)
@@ -301,6 +353,12 @@ void DownloadManager::handleFinished(Job *job, int exitCode)
 
     if (exitCode != 0) {
         const QString raw = YtDlp::extractError(job->stderrBuffer);
+
+        // Before treating this as a failure, consider whether the cookie
+        // decision was simply wrong for this video.
+        if (retryWithOppositeCookies(job, raw))
+            return;
+
         // Classification reads the original text: the rewritten form is shorter
         // and would lose the markers it looks for.
         if (scheduleRetry(job, raw))

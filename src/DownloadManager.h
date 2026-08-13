@@ -64,6 +64,8 @@ private:
         VideoInfo video;
         bool      cancelled = false;
         int       attempt = 0;      // 0 on the first try
+        bool      withCookies = false;
+        bool      cookieSwitchTried = false;   // one flip per job, either way
         QString   channelTitle;
         QString   channelId;
         QString   destinationDir;
@@ -80,7 +82,14 @@ private:
     void finalize(Job *job, Outcome outcome, const QString &message);
     void parseProgressLine(Job *job, const QString &line);
 
+    bool cookiesConfigured() const;
     bool scheduleRetry(Job *job, const QString &reason);
+
+    // Retries the same video with cookies turned on or off, when the failure
+    // says the current choice was the wrong one. Costs no automatic-retry
+    // attempts, because it is a different attempt rather than the same one
+    // repeated.
+    bool retryWithOppositeCookies(Job *job, const QString &reason);
 
     Database          *m_db;
     Settings           m_settings;

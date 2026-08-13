@@ -114,7 +114,48 @@ QComboBox {
     min-width: 130px;
 }
 
-QComboBox::drop-down { border: none; width: 18px; }
+/* Combo and spin indicators. Qt's own arrow is a boxed triangle that sits
+   awkwardly inside these rounded controls, so a chevron is used instead.
+   The @CHEVRON_*@ placeholders are replaced by Theme::apply with paths to
+   images it draws at run time, in the current theme's colour and at the
+   right scale for the display. Nothing binary lives in the repository. */
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    width: 26px;
+    border: none;
+    background: transparent;
+}
+
+QComboBox::down-arrow {
+    image: url(@CHEVRON_DOWN@);
+    width: 10px;
+    height: 10px;
+    margin-right: 10px;
+}
+
+QSpinBox::up-button, QSpinBox::down-button {
+    subcontrol-origin: border;
+    width: 18px;
+    border: none;
+    background: transparent;
+}
+
+QSpinBox::up-button { subcontrol-position: top right; margin-top: 2px; }
+QSpinBox::down-button { subcontrol-position: bottom right; margin-bottom: 2px; }
+
+QSpinBox::up-arrow {
+    image: url(@CHEVRON_UP@);
+    width: 9px;
+    height: 9px;
+}
+
+QSpinBox::down-arrow {
+    image: url(@CHEVRON_DOWN@);
+    width: 9px;
+    height: 9px;
+}
 
 QComboBox QAbstractItemView {
     background: #212121;

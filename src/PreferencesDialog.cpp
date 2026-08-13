@@ -15,6 +15,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
@@ -42,9 +43,21 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
     , m_original(current)
 {
     setWindowTitle(tr("Preferences"));
-    setMinimumWidth(620);
+    setMinimumSize(620, 560);
+    resize(700, 680);
 
     auto *tabs = new QTabWidget(this);
+
+    // Wraps a tab page so it scrolls rather than clipping. The Downloading tab
+    // in particular is now taller than a small screen.
+    auto scrollable = [](QWidget *page) -> QWidget * {
+        auto *area = new QScrollArea;
+        area->setWidget(page);
+        area->setWidgetResizable(true);
+        area->setFrameShape(QFrame::NoFrame);
+        area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        return area;
+    };
 
     // ---- Locations --------------------------------------------------------
     auto *locations = new QWidget(this);
@@ -59,7 +72,7 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
                                "(catalog.db) lives here too, alongside the media."), this);
     note->setWordWrap(true);
     note->setObjectName(QStringLiteral("hint"));
-    locationForm->addRow(QString(), note);
+    locationForm->addRow(note);
 
     m_ytDlpPath = new QLineEdit(current.ytDlpPath, this);
     locationForm->addRow(tr("yt-dlp"),
@@ -82,7 +95,7 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
            "automatically; name any other runtime here."), this);
     runtimeNote->setWordWrap(true);
     runtimeNote->setObjectName(QStringLiteral("hint"));
-    locationForm->addRow(QString(), runtimeNote);
+    locationForm->addRow(runtimeNote);
 
     m_theme = new QComboBox(this);
     m_theme->addItem(tr("Dark"),  QStringLiteral("dark"));
@@ -109,9 +122,9 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
                                      "Nothing is downloaded or installed automatically."), this);
     updateNote->setWordWrap(true);
     updateNote->setObjectName(QStringLiteral("hint"));
-    locationForm->addRow(QString(), updateNote);
+    locationForm->addRow(updateNote);
 
-    tabs->addTab(locations, tr("Locations"));
+    tabs->addTab(scrollable(locations), tr("Locations"));
 
     // ---- Downloading ------------------------------------------------------
     auto *downloads = new QWidget(this);
@@ -181,7 +194,7 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
            "retried."), this);
     retryNote->setWordWrap(true);
     retryNote->setObjectName(QStringLiteral("hint"));
-    downloadForm->addRow(QString(), retryNote);
+    downloadForm->addRow(retryNote);
 
     m_sleepRequests = new QSpinBox(this);
     m_sleepRequests->setRange(0, 60);
@@ -209,7 +222,7 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
            "time on every download, so leave them off until 403 errors appear."), this);
     pacingNote->setWordWrap(true);
     pacingNote->setObjectName(QStringLiteral("hint"));
-    downloadForm->addRow(QString(), pacingNote);
+    downloadForm->addRow(pacingNote);
 
     m_extractorArgs = new QLineEdit(current.extractorArgs, this);
     m_extractorArgs->setPlaceholderText(
@@ -222,7 +235,7 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
            "it wants changes faster than this program is rebuilt."), this);
     extractorNote->setWordWrap(true);
     extractorNote->setObjectName(QStringLiteral("hint"));
-    downloadForm->addRow(QString(), extractorNote);
+    downloadForm->addRow(extractorNote);
 
     m_verboseLogging = new QCheckBox(tr("Verbose yt-dlp output"), this);
     m_verboseLogging->setChecked(current.verboseLogging);
@@ -234,7 +247,7 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
            "a PO token provider is loaded. Noisy; leave it off unless diagnosing."), this);
     verboseNote->setWordWrap(true);
     verboseNote->setObjectName(QStringLiteral("hint"));
-    downloadForm->addRow(QString(), verboseNote);
+    downloadForm->addRow(verboseNote);
 
     m_filenameTemplate = new QLineEdit(current.filenameTemplate, this);
     downloadForm->addRow(tr("Filename template"), m_filenameTemplate);
@@ -243,9 +256,9 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
            "chronologically even without reading timestamps."), this);
     templateNote->setWordWrap(true);
     templateNote->setObjectName(QStringLiteral("hint"));
-    downloadForm->addRow(QString(), templateNote);
+    downloadForm->addRow(templateNote);
 
-    tabs->addTab(downloads, tr("Downloading"));
+    tabs->addTab(scrollable(downloads), tr("Downloading"));
 
     // ---- What to keep -----------------------------------------------------
     auto *artefacts = new QWidget(this);
@@ -272,7 +285,7 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
     addCheck(m_embedChapters,   tr("Embed chapter markers"),             current.embedChapters);
     artefactLayout->addStretch();
 
-    tabs->addTab(artefacts, tr("What to keep"));
+    tabs->addTab(scrollable(artefacts), tr("What to keep"));
 
     // ---- Access -----------------------------------------------------------
     auto *access = new QWidget(this);
@@ -283,10 +296,11 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
     m_cookiesBrowser = new QComboBox(this);
     m_cookiesBrowser->setEditable(true);
     m_cookiesBrowser->addItem(tr("None"), QString());
-    for (const QString &browser : { QStringLiteral("firefox"), QStringLiteral("chrome"),
-                                    QStringLiteral("chromium"), QStringLiteral("brave"),
-                                    QStringLiteral("edge"), QStringLiteral("opera"),
-                                    QStringLiteral("vivaldi"), QStringLiteral("safari"),
+    // Every browser yt-dlp accepts, in the order it lists them itself.
+    for (const QString &browser : { QStringLiteral("brave"),    QStringLiteral("chrome"),
+                                    QStringLiteral("chromium"), QStringLiteral("edge"),
+                                    QStringLiteral("firefox"),  QStringLiteral("opera"),
+                                    QStringLiteral("safari"),   QStringLiteral("vivaldi"),
                                     QStringLiteral("whale") }) {
         m_cookiesBrowser->addItem(browser, browser);
     }
@@ -336,7 +350,23 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
            "and ties your downloads to your account."), this);
     cookiesNote->setWordWrap(true);
     cookiesNote->setObjectName(QStringLiteral("hint"));
-    accessForm->addRow(QString(), cookiesNote);
+    accessForm->addRow(cookiesNote);
+
+    m_cookiesOnlyWhenNeeded =
+        new QCheckBox(tr("Only send cookies when a video needs them"), this);
+    m_cookiesOnlyWhenNeeded->setChecked(current.cookiesOnlyWhenNeeded);
+    accessForm->addRow(tr("When to use"), m_cookiesOnlyWhenNeeded);
+
+    auto *whenNote = new QLabel(
+        tr("Sending cookies on every request makes the service offer formats that "
+           "cannot be downloaded, so videos that would work anonymously start "
+           "failing with <i>Requested format is not available</i>.<br><br>"
+           "With this on, each video is tried without cookies first, and retried "
+           "with them only when the failure says an account was needed. Turn it off "
+           "only if you specifically want every request authenticated."), this);
+    whenNote->setWordWrap(true);
+    whenNote->setObjectName(QStringLiteral("hint"));
+    accessForm->addRow(whenNote);
 
     m_cookiesFile = new QLineEdit(current.cookiesFile, this);
     accessForm->addRow(tr("Cookies file"),
@@ -348,9 +378,9 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
            "such as age-restricted or unlisted uploads you have access to."), this);
     accessNote->setWordWrap(true);
     accessNote->setObjectName(QStringLiteral("hint"));
-    accessForm->addRow(QString(), accessNote);
+    accessForm->addRow(accessNote);
 
-    tabs->addTab(access, tr("Access"));
+    tabs->addTab(scrollable(access), tr("Access"));
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel, this);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
@@ -413,6 +443,7 @@ Settings PreferencesDialog::result() const
                                : m_cookiesBrowser->currentText().trimmed();
     if (s.cookiesFromBrowser.compare(tr("None"), Qt::CaseInsensitive) == 0)
         s.cookiesFromBrowser.clear();
+    s.cookiesOnlyWhenNeeded = m_cookiesOnlyWhenNeeded->isChecked();
     s.cookiesFile       = m_cookiesFile->text().trimmed();
 
     if (s.ytDlpPath.isEmpty())

@@ -11,6 +11,10 @@
 // which matters when the output is meant to be an archive of record.
 namespace YtDlp {
 
+// Arguments for listing every format a video offers. Answers "requested format
+// is not available" directly: it shows what the service is actually serving.
+QStringList listFormatsArgs(const QString &videoUrl, const Settings &settings);
+
 // Arguments that list a channel's uploads without resolving each video
 // (fast: one request per page instead of one per video).
 //
@@ -27,7 +31,15 @@ QStringList channelProbeArgs(const QString &channelUrl, const Settings &settings
 QStringList downloadArgs(const VideoInfo &video,
                          const QString &destinationDir,
                          const QString &printFile,
-                         const Settings &settings);
+                         const Settings &settings,
+                         bool withCookies);
+
+// True when the failure says the video needed an account.
+bool needsAuthentication(const QString &rawError);
+
+// True when the service offered nothing downloadable - the usual result of
+// sending cookies to a request that did not need them.
+bool formatUnavailable(const QString &rawError);
 
 // Normalises whatever the user pasted (handle, /c/ URL, /channel/UC..., a video
 // URL) into a channel uploads URL. Returns an empty string if unusable.

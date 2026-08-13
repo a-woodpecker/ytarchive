@@ -35,6 +35,11 @@ struct Settings {
     int     autoRetryAttempts = 3;   // 0 disables
     int     autoRetryDelay = 20;     // seconds; multiplied by the attempt number
 
+    // Appended verbatim to every yt-dlp invocation. This ecosystem changes far
+    // faster than this program is rebuilt, so there has to be a way to pass a
+    // flag it knows nothing about without waiting for a new version.
+    QString extraArguments;
+
     // Adds -v and stops suppressing warnings, and logs the exact command line
     // for every yt-dlp invocation. The only way to see plugin and PO token
     // diagnostics from inside the application.
@@ -58,6 +63,13 @@ struct Settings {
     // Auth for age-gated or members-only material you have access to
     QString cookiesFromBrowser;     // e.g. "firefox", "chrome:Default"
     QString cookiesFile;
+
+    // Cookies unlock age-restricted and members-only videos, but they also make
+    // the service offer formats that cannot be downloaded, so sending them on
+    // every request breaks videos that would otherwise be fine. With this set,
+    // a download is attempted without them and retried with them only when the
+    // failure says authentication is what was missing.
+    bool cookiesOnlyWhenNeeded = true;
 
     QString filenameTemplate =
         QStringLiteral("%(upload_date>%Y-%m-%d)s [%(id)s] %(title).120B.%(ext)s");

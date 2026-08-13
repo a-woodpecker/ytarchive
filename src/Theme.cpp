@@ -1,7 +1,11 @@
 #include "Theme.h"
 
 #include <QApplication>
+#include <QDir>
 #include <QFile>
+#include <QPainter>
+#include <QPixmap>
+#include <QStandardPaths>
 #include <QPalette>
 #include <QStyleHints>
 
@@ -58,6 +62,50 @@ ThemePalette lightPalette()
     p.checkboxTick       = Qt::white;
     p.errorText          = QColor(0xC5, 0x22, 0x1F);
     return p;
+}
+
+// Draws a chevron and writes it to the cache directory, returning its path.
+// Qt's own combo and spin arrows are boxed triangles that sit badly inside
+// rounded controls, and a stylesheet cannot draw a chevron on its own - but
+// shipping image files means binary assets in the repository, one pair per
+// theme, that have to stay in step with these colours by hand. Drawing them
+// here keeps the repository text-only and the colour always correct.
+QString writeChevron(const QString &name, const QColor &colour, bool pointsUp)
+{
+    const QString dir =
+        QStandardPaths::writableLocation(QStandardPaths::CacheLocation)
+        + QStringLiteral("/chevrons");
+    QDir().mkpath(dir);
+
+    const QString path = dir + QChar('/') + name + QStringLiteral(".png");
+
+    // A companion at twice the size; Qt loads "name@2x.png" by itself on a
+    // high-DPI screen, so both are written.
+    for (int scale : { 1, 2 }) {
+        const int size = 10 * scale;
+        QPixmap pixmap(size, size);
+        pixmap.fill(Qt::transparent);
+
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        QPen pen(colour);
+        pen.setWidthF(1.6 * scale);
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+        painter.setPen(pen);
+
+        const double inset = 1.6 * scale;
+        const double top = pointsUp ? size - inset * 1.6 : inset * 1.6;
+        const double point = pointsUp ? inset : size - inset;
+        painter.drawPolyline(QPolygonF({ QPointF(inset, top),
+                                         QPointF(size / 2.0, point),
+                                         QPointF(size - inset, top) }));
+        painter.end();
+
+        pixmap.save(scale == 1 ? path
+                               : dir + QChar('/') + name + QStringLiteral("@2x.png"));
+    }
+    return path;
 }
 
 QString stylesheetFor(ThemeMode mode)
@@ -136,7 +184,16 @@ void apply(ThemeMode mode)
         qp.setColor(QPalette::HighlightedText, Qt::black);
     }
     qApp->setPalette(qp);
-    qApp->setStyleSheet(stylesheetFor(effective));
+
+    QString sheet = stylesheetFor(effective);
+    // Named per theme so switching does not read a stale image from the cache.
+    const QString suffix = effective == ThemeMode::Light ? QStringLiteral("light")
+                                                         : QStringLiteral("dark");
+    sheet.replace(QStringLiteral("@CHEVRON_DOWN@"),
+                  writeChevron(QStringLiteral("chevron-down-") + suffix, g_palette.meta, false));
+    sheet.replace(QStringLiteral("@CHEVRON_UP@"),
+                  writeChevron(QStringLiteral("chevron-up-") + suffix, g_palette.meta, true));
+    qApp->setStyleSheet(sheet);
 }
 
 const ThemePalette &palette() { return g_palette; }
