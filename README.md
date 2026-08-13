@@ -81,7 +81,28 @@ sudo apt install pipx && pipx install yt-dlp
 # keep it current:  pipx upgrade yt-dlp
 ```
 
-Then build with the bundled preset:
+Then build. The quickest route is the bundled script, which checks every
+dependency first and tells you exactly which apt package is missing rather than
+failing partway through a compile:
+
+```bash
+chmod +x packaging/build-linux.sh    # once, after cloning
+./packaging/build-linux.sh
+```
+
+| Option | Effect |
+|---|---|
+| `--run` | launch the binary once it builds |
+| `--clean` | delete the build tree first |
+| `--debug` | debug build with symbols, in `build/linux-debug` |
+| `--install-deps` | apt-get everything needed, then build |
+| `-j4` | limit parallel jobs |
+
+It also checks the runtime pieces after building - the SQLite driver, the
+Wayland plugin, ffmpeg and yt-dlp - and warns if yt-dlp came from apt, since
+that copy lags upstream.
+
+Or use CMake directly:
 
 ```bash
 cmake --preset unix
@@ -443,7 +464,7 @@ comparison is numeric and tolerates a leading `v`, so `1.10.0` correctly beats
 | `ThumbnailCache.*` | memory + disk thumbnail cache, deduplicated fetches |
 | `UpdateChecker.*` | GitHub Releases polling and version comparison |
 | `MainWindow.*` | layout and wiring |
-| `packaging/` | Inno Setup script and one-shot build script |
+| `packaging/` | Inno Setup script, Windows and Linux build scripts |
 | `Theme.*` | the two colour schemes, and everything the cards paint |
 | `resources/style.qss` | dark theme |
 | `resources/style-light.qss` | light theme |
