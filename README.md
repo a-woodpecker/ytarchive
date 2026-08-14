@@ -105,11 +105,16 @@ those. The same applies to yt-dlp installed with pipx, which lands in
 and their equivalents prepended to `PATH`, so a child yt-dlp can find a runtime
 the desktop session did not expose.
 
-**Install yt-dlp yourself rather than from a distribution package.** Packaged
-versions lag badly, and a stale yt-dlp fails against the service in ways that
-look like faults in this program. `pipx install yt-dlp` on Linux or macOS,
-`winget install -e --id yt-dlp.yt-dlp` on Windows, and keep it updated. This
-warning is the single most common cause of "it stopped working".
+**Install yt-dlp with pip or pipx, not from a package manager.** Two reasons.
+Packaged versions lag badly, and a stale yt-dlp fails against the service in
+ways that look like faults in this program - the single most common cause of
+"it stopped working". And packaged builds bundle their own Python, so the
+plugins described below cannot reach them.
+
+```bash
+pipx install yt-dlp     # Linux, macOS
+pip install -U yt-dlp   # Windows
+```
 
 ## Building on Linux
 
@@ -233,11 +238,25 @@ C:\Qt\6.11.1\msvc2022_64\bin\windeployqt.exe build\windows-ninja\ytarchive.exe
 
 ```bat
 winget install -e --id Gyan.FFmpeg
-winget install -e --id yt-dlp.yt-dlp
+winget install -e --id Python.Python.3.13
+pip install -U yt-dlp
 ```
 
 Reopen your terminal, then confirm `ffmpeg -version`, `ffprobe -version` and
 `yt-dlp --version` all respond. If they do, leave the paths in Preferences empty.
+
+**Install yt-dlp with pip, not winget.** The winget package is a standalone
+`yt-dlp.exe` carrying its own bundled Python, and the two plugins this needs -
+the challenge solver and the PO token provider - can then never be found:
+`pip install` reports success while installing them into a different Python
+entirely. Installing yt-dlp with pip puts everything in one place, and every
+plugin instruction then works as written.
+
+If you would rather not install Python, winget's yt-dlp is fine for downloads
+that need no plugins. For the challenge solver, enable **Preferences >
+Downloading > Allow yt-dlp to download its challenge solver**, which needs no
+plugin. The PO token provider has no equivalent shortcut: its plugin archive has
+to be extracted into `%APPDATA%\yt-dlp\plugins` by hand.
 
 FFmpeg ships no official Windows installer, so winget pulls a community build
 (gyan.dev) which intermittently fails to add itself to `PATH`. If it isn't
@@ -704,6 +723,15 @@ current details, which change often.
 
 Setting a provider up needs two pieces: a plugin for yt-dlp, and a generator
 for it to talk to.
+
+**On Windows, check how yt-dlp was installed first.** A build from winget or a
+downloaded `yt-dlp.exe` is a standalone executable carrying its own bundled
+Python, so `pip install` puts the plugin into a different Python that yt-dlp
+never reads - pip reports success and nothing changes. Either install yt-dlp
+itself with pip or pipx so both share one Python, or extract the plugin's
+release archive into the directory yt-dlp scans, usually
+`%APPDATA%\yt-dlp\plugins`. **Help > Check download support** reports the
+install type and the exact directory, and adjusts its instructions to match.
 
 ```bash
 pipx inject yt-dlp bgutil-ytdlp-pot-provider     # the plugin
