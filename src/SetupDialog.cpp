@@ -23,6 +23,22 @@ namespace {
 // far enough to report which providers are loaded.
 const char *kProbeUrl = "https://www.youtube.com/watch?v=BaW_jenozKc";
 
+// Every fix below is platform-specific. Showing an apt command to a Windows
+// user is worse than showing nothing: it looks authoritative and cannot work.
+QString pick(const char *onWindows, const char *onMac, const char *onLinux)
+{
+#if defined(Q_OS_WIN)
+    Q_UNUSED(onMac); Q_UNUSED(onLinux);
+    return QString::fromUtf8(onWindows);
+#elif defined(Q_OS_MACOS)
+    Q_UNUSED(onWindows); Q_UNUSED(onLinux);
+    return QString::fromUtf8(onMac);
+#else
+    Q_UNUSED(onWindows); Q_UNUSED(onMac);
+    return QString::fromUtf8(onLinux);
+#endif
+}
+
 QString statusText(int status)
 {
     switch (status) {
@@ -45,36 +61,48 @@ SetupDialog::SetupDialog(const Settings &settings, QWidget *parent)
     m_checks = {
         { tr("yt-dlp"),
           tr("Performs every listing and download."),
-          QStringLiteral("pipx upgrade yt-dlp"),
-          tr("Distribution packages lag badly; pipx keeps it current.") },
+          pick("winget upgrade -e --id yt-dlp.yt-dlp",
+               "brew upgrade yt-dlp",
+               "pipx upgrade yt-dlp"),
+          tr("Packaged versions lag badly, and a stale yt-dlp fails in ways that "
+             "look like faults in this program.") },
 
         { tr("JavaScript runtime"),
           tr("Required to sign media URLs. Without it, listings work and every "
              "download fails with HTTP 403."),
-          QStringLiteral("curl -fsSL https://deno.land/install.sh | sh"),
+          pick("winget install -e --id DenoLand.Deno",
+               "brew install deno",
+               "curl -fsSL https://deno.land/install.sh | sh"),
           tr("Only deno is used automatically. To use node instead, install it and "
              "put \"node\" in Preferences > Locations > JavaScript runtime.") },
 
         { tr("ffmpeg"),
           tr("Merges the separate video and audio streams. A download runs to "
              "completion and then fails at the merge without it."),
-          QStringLiteral("sudo apt install ffmpeg"),
+          pick("winget install -e --id Gyan.FFmpeg",
+               "brew install ffmpeg",
+               "sudo apt install ffmpeg"),
           tr("ffprobe must sit beside ffmpeg; every build ships both.") },
 
         { tr("JavaScript challenge solver"),
           tr("Computes the signatures that turn the service's format entries into "
              "usable URLs. Without it, downloads that need it report \"Only images "
              "are available\" and then fail as though no format matched."),
-          QStringLiteral("pipx inject yt-dlp yt-dlp-ejs"),
+          pick("pip install -U yt-dlp-ejs",
+               "pipx inject yt-dlp yt-dlp-ejs",
+               "pipx inject yt-dlp yt-dlp-ejs"),
           tr("Installs the solver alongside yt-dlp, so nothing is fetched at run "
              "time. Alternatively, enable \"Allow yt-dlp to download its challenge "
-             "solver\" under Preferences > Downloading.") },
+             "solver\" under Preferences > Downloading, which needs no install at "
+             "all - useful with a standalone yt-dlp.exe, where plugins are awkward.") },
 
         { tr("PO token provider"),
           tr("Supplies the proof-of-origin tokens the service now demands for "
              "media URLs. Without one, downloads can fail with HTTP 403 part way "
              "through, at full speed, on videos that play fine in a browser."),
-          QStringLiteral("pipx inject yt-dlp bgutil-ytdlp-pot-provider"),
+          pick("pip install -U bgutil-ytdlp-pot-provider",
+               "pipx inject yt-dlp bgutil-ytdlp-pot-provider",
+               "pipx inject yt-dlp bgutil-ytdlp-pot-provider"),
           tr("Then set up the generator it talks to. The script option needs only "
              "the JavaScript runtime above - no Docker and no background service. "
              "See the README section on HTTP 403.") },

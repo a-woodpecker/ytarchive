@@ -20,6 +20,7 @@ class QPlainTextEdit;
 class QCheckBox;
 class QProgressBar;
 
+class VideoCardDelegate;
 class VideoModel;
 class VideoFilterProxy;
 class ThumbnailCache;
@@ -90,6 +91,7 @@ private:
 
     QListWidget *m_channelList = nullptr;
     QListView   *m_grid = nullptr;
+    VideoCardDelegate *m_cardDelegate = nullptr;
     QLineEdit   *m_search = nullptr;
     QComboBox   *m_stateFilter = nullptr;
     QLabel      *m_headerTitle = nullptr;

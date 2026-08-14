@@ -13,6 +13,11 @@ public:
 
     static constexpr int kCardWidth  = 320;
     static constexpr int kCardHeight = 258;
+    // Extra height for the channel line, added only when it is being shown.
+    static constexpr int kChannelLineHeight = 17;
+
+    void setShowChannel(bool show) { m_showChannel = show; }
+    bool showChannel() const { return m_showChannel; }
 
     QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const override;
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
@@ -24,5 +29,6 @@ protected:
 
 private:
     static QRect thumbRect(const QRect &card);
+    bool m_showChannel = false;
     static QRect checkRect(const QRect &card);
 };

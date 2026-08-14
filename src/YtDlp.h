@@ -56,6 +56,11 @@ VideoInfo   parseFlatEntry(const QJsonObject &entry);
 // Reads a downloaded .info.json and returns the authoritative upload time.
 QDateTime uploadDateFromInfoJson(const QString &infoJsonPath);
 
+// Counts that only exist once a video has been downloaded: a flat channel
+// listing carries neither. Either output may be left at -1.
+void countsFromInfoJson(const QString &infoJsonPath, qint64 *likeCount,
+                        qint64 *viewCount);
+
 // The sidecar path yt-dlp uses for a given media file.
 QString infoJsonPathFor(const QString &mediaPath);
 

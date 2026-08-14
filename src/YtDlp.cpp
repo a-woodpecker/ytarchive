@@ -412,6 +412,32 @@ QDateTime uploadDateFromInfoJson(const QString &infoJsonPath)
     return QDateTime();
 }
 
+void countsFromInfoJson(const QString &infoJsonPath, qint64 *likeCount,
+                        qint64 *viewCount)
+{
+    if (likeCount) *likeCount = -1;
+    if (viewCount) *viewCount = -1;
+
+    QFile f(infoJsonPath);
+    if (!f.open(QIODevice::ReadOnly))
+        return;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+    if (!doc.isObject())
+        return;
+    const QJsonObject o = doc.object();
+
+    auto read = [&o](const char *key, qint64 *out) {
+        if (!out)
+            return;
+        const QJsonValue v = o.value(QLatin1String(key));
+        // A hidden like count is null rather than absent, and must stay -1.
+        if (!v.isNull() && !v.isUndefined() && v.toDouble(-1) >= 0)
+            *out = static_cast<qint64>(v.toDouble(-1));
+    };
+    read("like_count", likeCount);
+    read("view_count", viewCount);
+}
+
 QString infoJsonPathFor(const QString &mediaPath)
 {
     QFileInfo fi(mediaPath);

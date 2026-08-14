@@ -425,10 +425,15 @@ void DownloadManager::handleFinished(Job *job, int exitCode)
     }
 
     const qint64 size = QFileInfo(mediaPath).size();
+    qint64 likeCount = -1;
+    qint64 viewCount = -1;
+    if (QFileInfo::exists(infoJson))
+        YtDlp::countsFromInfoJson(infoJson, &likeCount, &viewCount);
+
     if (m_db) {
         m_db->recordDownload(job->video.pk, mediaPath,
                              QFileInfo::exists(infoJson) ? infoJson : QString(),
-                             size, uploadDate);
+                             size, uploadDate, likeCount, viewCount);
     }
 
     finalize(job, Outcome::Success, mediaPath);

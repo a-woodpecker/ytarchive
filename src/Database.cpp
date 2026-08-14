@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QSqlRecord>
 #include <QUuid>
 #include <QVariant>
 
@@ -43,6 +44,11 @@ VideoInfo readVideo(const QSqlQuery &q)
     v.dateIsApproximate= q.value("date_approx").toInt() != 0;
     v.durationSecs     = q.value("duration").toLongLong();
     v.viewCount        = q.value("view_count").toLongLong();
+    v.likeCount        = q.value("like_count").toLongLong();
+    // Present only on the joined query used by the video list.
+    const int channelTitleColumn = q.record().indexOf(QStringLiteral("channel_title"));
+    if (channelTitleColumn >= 0)
+        v.channelTitle = q.value(channelTitleColumn).toString();
     v.fileSize         = q.value("file_size").toLongLong();
     v.state            = static_cast<DownloadState>(q.value("state").toInt());
     return v;
@@ -122,15 +128,25 @@ bool Database::applySchema(QString *error)
             "  first_seen     INTEGER)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_videos_channel ON videos(channel_id)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_videos_date ON videos(upload_date DESC)"),
-        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_videos_state ON videos(state)")
+        QStringLiteral("CREATE INDEX IF NOT EXISTS idx_videos_state ON videos(state)"),
+        // Added after the first release; ALTER is the only way to reach an
+        // existing catalog, and it is harmless to attempt every start-up.
+        QStringLiteral("ALTER TABLE videos ADD COLUMN like_count INTEGER NOT NULL DEFAULT -1")
     };
 
     QSqlQuery q(m_db);
     for (const QString &s : statements) {
-        if (!q.exec(s)) {
-            if (error) *error = q.lastError().text();
-            return false;
+        if (q.exec(s))
+            continue;
+        // A duplicate column means the migration already ran; anything else is
+        // a real failure.
+        if (s.startsWith(QStringLiteral("ALTER TABLE"))
+            && q.lastError().text().contains(QStringLiteral("duplicate column"),
+                                             Qt::CaseInsensitive)) {
+            continue;
         }
+        if (error) *error = q.lastError().text();
+        return false;
     }
     return true;
 }
@@ -274,11 +290,15 @@ QVector<VideoInfo> Database::videos(qint64 channelPk)
     QSqlQuery q(m_db);
     if (channelPk < 0) {
         q.prepare(QStringLiteral(
-            "SELECT * FROM videos ORDER BY upload_date DESC NULLS LAST, id DESC"));
+            "SELECT v.*, c.title AS channel_title FROM videos v "
+            "JOIN channels c ON c.id = v.channel_id "
+            "ORDER BY v.upload_date DESC NULLS LAST, v.id DESC"));
     } else {
         q.prepare(QStringLiteral(
-            "SELECT * FROM videos WHERE channel_id = :cid "
-            "ORDER BY upload_date DESC NULLS LAST, id DESC"));
+            "SELECT v.*, c.title AS channel_title FROM videos v "
+            "JOIN channels c ON c.id = v.channel_id "
+            "WHERE v.channel_id = :cid "
+            "ORDER BY v.upload_date DESC NULLS LAST, v.id DESC"));
         q.bindValue(":cid", channelPk);
     }
     if (!q.exec())
@@ -313,8 +333,25 @@ bool Database::recordDownload(qint64 pk,
                               const QString &filePath,
                               const QString &infoJsonPath,
                               qint64 fileSize,
-                              const QDateTime &confirmedUploadDate)
+                              const QDateTime &confirmedUploadDate,
+                              qint64 likeCount,
+                              qint64 viewCount)
 {
+    // Written separately so a hidden or missing count never overwrites a good
+    // one from an earlier download.
+    if (likeCount >= 0 || viewCount >= 0) {
+        QSqlQuery counts(m_db);
+        counts.prepare(QStringLiteral(
+            "UPDATE videos SET "
+            "  like_count = CASE WHEN :like >= 0 THEN :like ELSE like_count END,"
+            "  view_count = CASE WHEN :view >= 0 THEN :view ELSE view_count END "
+            "WHERE id = :id"));
+        counts.bindValue(":like", likeCount);
+        counts.bindValue(":view", viewCount);
+        counts.bindValue(":id", pk);
+        counts.exec();
+    }
+
     QSqlQuery q(m_db);
     if (confirmedUploadDate.isValid()) {
         q.prepare(QStringLiteral(

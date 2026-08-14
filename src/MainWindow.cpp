@@ -412,7 +412,8 @@ void MainWindow::buildUi()
     m_grid = new VideoGridView(central);
     m_grid->setObjectName(QStringLiteral("videoGrid"));
     m_grid->setModel(m_proxy);
-    m_grid->setItemDelegate(new VideoCardDelegate(m_grid));
+    m_cardDelegate = new VideoCardDelegate(m_grid);
+    m_grid->setItemDelegate(m_cardDelegate);
     m_grid->setViewMode(QListView::IconMode);
     m_grid->setResizeMode(QListView::Adjust);
     m_grid->setMovement(QListView::Static);
@@ -599,6 +600,18 @@ void MainWindow::reloadVideos()
 {
     if (!m_db.isOpen())
         return;
+
+    // Naming the channel matters in the combined view and is noise inside one
+    // channel, so the cards grow a line only where it earns its space.
+    const bool combined = currentChannelPk() == kAllChannels;
+    if (m_cardDelegate->showChannel() != combined) {
+        m_cardDelegate->setShowChannel(combined);
+        m_model->setShowChannel(combined);
+        m_grid->setGridSize(QSize(VideoCardDelegate::kCardWidth + 12,
+                                  VideoCardDelegate::kCardHeight + 12
+                                      + (combined ? VideoCardDelegate::kChannelLineHeight : 0)));
+    }
+
     m_model->setVideos(m_db.videos(currentChannelPk()));
     m_grid->scrollToTop();
 }

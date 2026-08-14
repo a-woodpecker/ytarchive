@@ -12,7 +12,8 @@ program is the catalog, the interface and the archival discipline around it.
 
 - Add channels by URL or handle (`@channelname`, `youtube.com/@name`, `/channel/UC…`)
 - Loads the full upload list without downloading anything
-- Card grid with thumbnails, durations, dates, view counts and per-video state
+- Card grid with thumbnails, durations, dates, view and like counts, and
+  per-video state; cards name their channel in the combined view
 - Per-video checkboxes, plus *select all*, *select not archived*, *download everything missing*
 - Concurrent downloads with live progress, speed and ETA; cancel one or all
 - Retry a single failed video, or every failure in the current view at once
@@ -355,7 +356,7 @@ intend to support** - which is why the release workflow builds the `.deb`
 inside a `debian:12` container rather than on the Ubuntu runner.
 
 The distribution codename stays in the filename and version
-(`ytarchive_0.2.1~bookworm_amd64.deb`) as a record of where it was built.
+(`ytarchive_0.2.2~bookworm_amd64.deb`) as a record of where it was built.
 Architecture is likewise whatever you built on, so an arm64 machine needs its
 own build.
 
@@ -416,10 +417,10 @@ architecture, then by distribution codename where the name carries one:
 
 | Running on | Offered |
 |---|---|
-| Windows x86_64 | `YTArchive-0.2.1-setup.exe` |
-| Debian 12 amd64 | `ytarchive_0.2.1~bookworm_amd64.deb` |
-| Ubuntu 24.04 amd64 | `ytarchive_0.2.1~noble_amd64.deb` |
-| Debian arm64 | `ytarchive_0.2.1~bookworm_arm64.deb` |
+| Windows x86_64 | `YTArchive-0.2.2-setup.exe` |
+| Debian 12 amd64 | `ytarchive_0.2.2~bookworm_amd64.deb` |
+| Ubuntu 24.04 amd64 | `ytarchive_0.2.2~noble_amd64.deb` |
+| Debian arm64 | `ytarchive_0.2.2~bookworm_arm64.deb` |
 | Anything with no matching build | the release page |
 
 Each narrowing step is skipped when it would leave nothing, so a release with a
@@ -497,7 +498,7 @@ canvas, so a light version would vanish against pale thumbnails.
 | `Theme.*` | both colour schemes, and everything the cards paint |
 | `FileTime.*` | cross-platform timestamp stamping |
 | `Models.*` | shared structs and formatting helpers |
-| `resources/` | stylesheets, icon, desktop entry |
+| `resources/` | stylesheets, icons, Windows resource script, desktop entry |
 | `packaging/` | Inno Setup script, build scripts, `.deb` packaging |
 | `tools/verify-tree.ps1` | checks the repository layout against git |
 | `tools/check-audio.sh` | decodes archived files to find corrupt or truncated audio |
@@ -527,6 +528,17 @@ canvas, so a light version would vanish against pale thumbnails.
   says so rather than failing silently.
 - Cookie options exist for material your own account can see - age-restricted,
   unlisted, memberships - but an anonymous visitor cannot.
+
+## What the cards show
+
+Thumbnail, duration, title, date, and counts. In **All videos** each card also
+names its channel; inside a single channel that line is dropped, since it would
+repeat on every card, and the cards shrink accordingly.
+
+Like counts appear only for videos that have been downloaded. A flat channel
+listing does not carry them - they are read from `.info.json` when a download
+completes, along with a refreshed view count. A hidden like count stays absent
+rather than showing as zero.
 
 ## Panels
 
