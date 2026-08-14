@@ -45,6 +45,7 @@ private:
     void checkYtDlp(int index);
     void checkRuntime(int index);
     void checkFfmpeg(int index);
+    void checkChallengeSolver(int index);
     void checkTokenProvider(int index);
 
     Settings        m_settings;

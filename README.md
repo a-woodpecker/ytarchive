@@ -74,6 +74,7 @@ directory listing.
 | **yt-dlp** | all interaction with the video service |
 | **ffmpeg** (with `ffprobe`) | merging separate video and audio streams |
 | **A JavaScript runtime** | yt-dlp needs one to sign media URLs |
+| **yt-dlp-ejs** | the challenge solver the runtime executes |
 
 yt-dlp and ffmpeg are runtime dependencies invoked as subprocesses. If they
 aren't on `PATH`, set their full paths in **File > Preferences > Locations**.
@@ -663,7 +664,23 @@ $ /home/you/.local/bin/yt-dlp --no-colors --ignore-config -v ...
 A different path there than the one your shell resolves is the whole problem -
 a plugin injected into one yt-dlp is invisible to another.
 
-**2. A PO token is required.** A Proof of Origin token is a separate mechanism
+**2. The JavaScript challenge solver is missing.** Distinct from both the
+runtime and the token provider: the runtime *executes* the solver, and the
+solver itself ships separately. Without it the log reads `n challenge solving
+failed` followed by `Only images are available for download`, and the download
+ends as *Requested format is not available* even though nothing is wrong with
+the video. Install it beside yt-dlp:
+
+```bash
+pipx inject yt-dlp yt-dlp-ejs
+```
+
+Or enable **Preferences > Downloading > Allow yt-dlp to download its challenge
+solver**, which passes `--remote-components ejs:github` and fetches it when
+needed. Installing it is preferable: nothing is downloaded mid-archive, and it
+works offline.
+
+**3. A PO token is required.** A Proof of Origin token is a separate mechanism
 from the JS runtime, and having a runtime does not supply one. Without it,
 requests for the affected clients can be refused outright. Run
 `yt-dlp -v "<video URL>" 2>&1 | grep -i "pot\|PO Token"`; if it reports
@@ -698,15 +715,15 @@ version - a mismatch fails as though the plugin were absent.
 Confirm either way with `yt-dlp -v <url> 2>&1 | grep "PO Token Providers"`,
 or with **Help > Check download support**.
 
-**3. yt-dlp is out of date.** `yt-dlp --update-to nightly`. The startup check
+**4. yt-dlp is out of date.** `yt-dlp --update-to nightly`. The startup check
 reports the version and its age.
 
-**4. The format selector.** Separate video and audio streams are more fragile
+**5. The format selector.** Separate video and audio streams are more fragile
 than a single pre-combined one, and fail with 403 more readily. Setting quality
 to `b` in Preferences trades resolution for reliability, which is worth testing
 if only some videos fail.
 
-**5. Rate limiting.** The likeliest cause when failures start *partway through*
+**6. Rate limiting.** The likeliest cause when failures start *partway through*
 a download or only after a queue has been running. Reduce *Simultaneous
 downloads* to 1, set a speed limit, and set the pause options under
 **Preferences > Downloading**. Pauses cost time on every download, so leave

@@ -50,6 +50,7 @@ Settings Settings::load()
     v.extractorArgs     = s.value("extractorArgs").toString();
     v.extraArguments    = s.value("extraArguments").toString();
     v.verboseLogging    = s.value("verboseLogging", false).toBool();
+    v.allowRemoteComponents = s.value("allowRemoteComponents", false).toBool();
     v.autoRetryAttempts = s.value("autoRetryAttempts", v.autoRetryAttempts).toInt();
     v.autoRetryDelay    = s.value("autoRetryDelay", v.autoRetryDelay).toInt();
     v.writeInfoJson     = s.value("writeInfoJson", true).toBool();
@@ -91,6 +92,7 @@ void Settings::save() const
     s.setValue("extractorArgs", extractorArgs);
     s.setValue("extraArguments", extraArguments);
     s.setValue("verboseLogging", verboseLogging);
+    s.setValue("allowRemoteComponents", allowRemoteComponents);
     s.setValue("autoRetryAttempts", autoRetryAttempts);
     s.setValue("autoRetryDelay", autoRetryDelay);
     s.setValue("writeInfoJson", writeInfoJson);

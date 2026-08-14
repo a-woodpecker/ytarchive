@@ -66,6 +66,15 @@ void appendPacingArgs(QStringList &args, const Settings &s)
 
 // Whatever the user typed, parsed the way a shell would so quoted values with
 // spaces survive.
+// Without a challenge solver, the service's "n" signature cannot be computed
+// and its formats arrive with no usable URL - which surfaces as "Only images
+// are available" and then "Requested format is not available".
+void appendRemoteComponentArgs(QStringList &args, const Settings &s)
+{
+    if (s.allowRemoteComponents)
+        args << QStringLiteral("--remote-components") << QStringLiteral("ejs:github");
+}
+
 void appendExtraArgs(QStringList &args, const Settings &s)
 {
     const QString extra = s.extraArguments.trimmed();
@@ -194,6 +203,7 @@ QStringList downloadArgs(const VideoInfo &video,
          << QString::number(qMax(0, settings.extractorRetries));
 
     appendRuntimeArgs(args, settings);
+    appendRemoteComponentArgs(args, settings);
     appendExtractorArgs(args, settings);
     appendPacingArgs(args, settings);
     // Cookies are the caller's decision, not a setting read here: sending them
@@ -469,6 +479,10 @@ QString friendlyError(const QString &rawError)
           QT_TRANSLATE_NOOP("YtDlp", "Not published yet: a scheduled premiere.") },
         { "video unavailable",
           QT_TRANSLATE_NOOP("YtDlp", "Video unavailable.") },
+        { "only images are available",
+          QT_TRANSLATE_NOOP("YtDlp",
+            "No video formats were usable. The JavaScript challenge solver is "
+            "missing: see Help > Check download support.") },
         { "requested format is not available",
           QT_TRANSLATE_NOOP("YtDlp",
             "Nothing downloadable was offered. This is usually the cost of "

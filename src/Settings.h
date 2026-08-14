@@ -40,6 +40,12 @@ struct Settings {
     // flag it knows nothing about without waiting for a new version.
     QString extraArguments;
 
+    // Passes --remote-components ejs:github, letting yt-dlp download the
+    // JavaScript challenge solver it needs to sign media URLs. Off by default
+    // because it fetches code at run time; installing the yt-dlp-ejs package
+    // is the better answer where that is possible.
+    bool allowRemoteComponents = false;
+
     // Adds -v and stops suppressing warnings, and logs the exact command line
     // for every yt-dlp invocation. The only way to see plugin and PO token
     // diagnostics from inside the application.

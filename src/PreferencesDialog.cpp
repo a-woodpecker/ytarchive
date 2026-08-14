@@ -237,6 +237,21 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
     extractorNote->setObjectName(QStringLiteral("hint"));
     downloadForm->addRow(extractorNote);
 
+    m_allowRemoteComponents =
+        new QCheckBox(tr("Allow yt-dlp to download its challenge solver"), this);
+    m_allowRemoteComponents->setChecked(current.allowRemoteComponents);
+    downloadForm->addRow(tr("Challenge solver"), m_allowRemoteComponents);
+
+    auto *remoteNote = new QLabel(
+        tr("Signing media URLs needs a JavaScript solver that is distributed "
+           "separately from yt-dlp. Installing it is better - "
+           "<tt>pipx inject yt-dlp yt-dlp-ejs</tt> - because nothing is fetched while "
+           "downloading. This option lets yt-dlp retrieve it instead, which means "
+           "running code downloaded at the time it is needed."), this);
+    remoteNote->setWordWrap(true);
+    remoteNote->setObjectName(QStringLiteral("hint"));
+    downloadForm->addRow(remoteNote);
+
     m_verboseLogging = new QCheckBox(tr("Verbose yt-dlp output"), this);
     m_verboseLogging->setChecked(current.verboseLogging);
     downloadForm->addRow(tr("Diagnostics"), m_verboseLogging);
@@ -424,6 +439,7 @@ Settings PreferencesDialog::result() const
     s.maxSleepInterval  = m_maxSleepInterval->value();
     s.extractorArgs     = m_extractorArgs->text().trimmed();
     s.verboseLogging    = m_verboseLogging->isChecked();
+    s.allowRemoteComponents = m_allowRemoteComponents->isChecked();
     s.autoRetryAttempts = m_autoRetryAttempts->value();
     s.autoRetryDelay    = m_autoRetryDelay->value();
     s.filenameTemplate  = m_filenameTemplate->text().trimmed();

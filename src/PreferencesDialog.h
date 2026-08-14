@@ -42,6 +42,7 @@ private:
     QSpinBox  *m_maxSleepInterval;
     QLineEdit *m_extractorArgs;
     QCheckBox *m_verboseLogging;
+    QCheckBox *m_allowRemoteComponents;
     QSpinBox  *m_autoRetryAttempts;
     QSpinBox  *m_autoRetryDelay;
     QCheckBox *m_infoJson;

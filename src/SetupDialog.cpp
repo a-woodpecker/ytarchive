@@ -61,6 +61,15 @@ SetupDialog::SetupDialog(const Settings &settings, QWidget *parent)
           QStringLiteral("sudo apt install ffmpeg"),
           tr("ffprobe must sit beside ffmpeg; every build ships both.") },
 
+        { tr("JavaScript challenge solver"),
+          tr("Computes the signatures that turn the service's format entries into "
+             "usable URLs. Without it, downloads that need it report \"Only images "
+             "are available\" and then fail as though no format matched."),
+          QStringLiteral("pipx inject yt-dlp yt-dlp-ejs"),
+          tr("Installs the solver alongside yt-dlp, so nothing is fetched at run "
+             "time. Alternatively, enable \"Allow yt-dlp to download its challenge "
+             "solver\" under Preferences > Downloading.") },
+
         { tr("PO token provider"),
           tr("Supplies the proof-of-origin tokens the service now demands for "
              "media URLs. Without one, downloads can fail with HTTP 403 part way "
@@ -221,7 +230,8 @@ void SetupDialog::runChecks()
     checkYtDlp(0);
     checkRuntime(1);
     checkFfmpeg(2);
-    checkTokenProvider(3);
+    checkChallengeSolver(3);
+    checkTokenProvider(4);
 }
 
 void SetupDialog::checkYtDlp(int index)
@@ -315,6 +325,48 @@ void SetupDialog::checkFfmpeg(int index)
         return;
     }
     setResult(index, Status::Good, ffmpeg);
+}
+
+void SetupDialog::checkChallengeSolver(int index)
+{
+    auto *proc = new QProcess(this);
+    proc->setProcessEnvironment(toolProcessEnvironment());
+    proc->setProgram(m_settings.ytDlpPath);
+    proc->setArguments({ QStringLiteral("-v"), QStringLiteral("--simulate"),
+                         QStringLiteral("--no-warnings"),
+                         QString::fromLatin1(kProbeUrl) });
+
+    connect(proc, &QProcess::errorOccurred, this, [this, index, proc] {
+        setResult(index, Status::Missing, tr("Could not run yt-dlp to check."));
+        proc->deleteLater();
+    });
+    connect(proc, &QProcess::finished, this, [this, index, proc] {
+        const QString out = QString::fromUtf8(proc->readAllStandardError())
+                            + QString::fromUtf8(proc->readAllStandardOutput());
+        proc->deleteLater();
+
+        // yt-dlp lists what it loaded; the solver appears as yt_dlp_ejs.
+        static const QRegularExpression ejs(QStringLiteral("yt[_-]dlp[_-]ejs[- ]?([0-9.]*)"));
+        const QRegularExpressionMatch match = ejs.match(out);
+        if (match.hasMatch()) {
+            const QString version = match.captured(1);
+            setResult(index, Status::Good,
+                      version.isEmpty() ? tr("Installed") : tr("Version %1").arg(version));
+            m_output->appendPlainText(tr("Challenge solver: yt-dlp-ejs %1").arg(version));
+            return;
+        }
+
+        if (m_settings.allowRemoteComponents) {
+            setResult(index, Status::Warning,
+                      tr("Not installed, but yt-dlp is allowed to download it when "
+                         "needed. Installing it is faster and works offline."));
+            return;
+        }
+        setResult(index, Status::Missing,
+                  tr("Not installed. Signature solving will fail on the videos that "
+                     "need it."));
+    });
+    proc->start();
 }
 
 void SetupDialog::checkTokenProvider(int index)
