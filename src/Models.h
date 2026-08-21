@@ -40,8 +40,12 @@ struct VideoInfo {
     QString   errorText;
     QDateTime uploadDate;
     bool      dateIsApproximate = true;  // true until confirmed from the real info.json
+    QString   channelTitle;   // filled in by queries, for the "All videos" view
     qint64    durationSecs = 0;
     qint64    viewCount = -1;
+    // Only known once a video has been downloaded: a flat channel listing does
+    // not carry it, so it stays -1 until the info.json is read.
+    qint64    likeCount = -1;
     qint64    fileSize = 0;
     DownloadState state = DownloadState::NotDownloaded;
 

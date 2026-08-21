@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -15,6 +16,7 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QVBoxLayout>
 
 namespace {
@@ -22,6 +24,22 @@ namespace {
 // yt-dlp's own long-standing test video, used only to make the extractor run
 // far enough to report which providers are loaded.
 const char *kProbeUrl = "https://www.youtube.com/watch?v=BaW_jenozKc";
+
+// Every fix below is platform-specific. Showing an apt command to a Windows
+// user is worse than showing nothing: it looks authoritative and cannot work.
+QString pick(const char *onWindows, const char *onMac, const char *onLinux)
+{
+#if defined(Q_OS_WIN)
+    Q_UNUSED(onMac); Q_UNUSED(onLinux);
+    return QString::fromUtf8(onWindows);
+#elif defined(Q_OS_MACOS)
+    Q_UNUSED(onWindows); Q_UNUSED(onLinux);
+    return QString::fromUtf8(onMac);
+#else
+    Q_UNUSED(onWindows); Q_UNUSED(onMac);
+    return QString::fromUtf8(onLinux);
+#endif
+}
 
 QString statusText(int status)
 {
@@ -40,41 +58,56 @@ SetupDialog::SetupDialog(const Settings &settings, QWidget *parent)
     , m_settings(settings)
 {
     setWindowTitle(tr("Download support"));
-    resize(760, 620);
+    resize(820, 700);
 
     m_checks = {
         { tr("yt-dlp"),
           tr("Performs every listing and download."),
-          QStringLiteral("pipx upgrade yt-dlp"),
-          tr("Distribution packages lag badly; pipx keeps it current.") },
+          pick("pip install -U yt-dlp",
+               "pipx upgrade yt-dlp",
+               "pipx upgrade yt-dlp"),
+          tr("Install through pip or pipx rather than a package manager. Packaged "
+             "builds bundle their own Python, and the plugins listed below can then "
+             "never be found - pip reports success and nothing changes. Packaged "
+             "versions also lag, and a stale yt-dlp fails in ways that look like "
+             "faults in this program.") },
 
         { tr("JavaScript runtime"),
           tr("Required to sign media URLs. Without it, listings work and every "
              "download fails with HTTP 403."),
-          QStringLiteral("curl -fsSL https://deno.land/install.sh | sh"),
+          pick("winget install -e --id DenoLand.Deno",
+               "brew install deno",
+               "curl -fsSL https://deno.land/install.sh | sh"),
           tr("Only deno is used automatically. To use node instead, install it and "
              "put \"node\" in Preferences > Locations > JavaScript runtime.") },
 
         { tr("ffmpeg"),
           tr("Merges the separate video and audio streams. A download runs to "
              "completion and then fails at the merge without it."),
-          QStringLiteral("sudo apt install ffmpeg"),
+          pick("winget install -e --id Gyan.FFmpeg",
+               "brew install ffmpeg",
+               "sudo apt install ffmpeg"),
           tr("ffprobe must sit beside ffmpeg; every build ships both.") },
 
         { tr("JavaScript challenge solver"),
           tr("Computes the signatures that turn the service's format entries into "
              "usable URLs. Without it, downloads that need it report \"Only images "
              "are available\" and then fail as though no format matched."),
-          QStringLiteral("pipx inject yt-dlp yt-dlp-ejs"),
+          pick("pip install -U yt-dlp-ejs",
+               "pipx inject yt-dlp yt-dlp-ejs",
+               "pipx inject yt-dlp yt-dlp-ejs"),
           tr("Installs the solver alongside yt-dlp, so nothing is fetched at run "
              "time. Alternatively, enable \"Allow yt-dlp to download its challenge "
-             "solver\" under Preferences > Downloading.") },
+             "solver\" under Preferences > Downloading, which needs no install at "
+             "all - useful with a standalone yt-dlp.exe, where plugins are awkward.") },
 
         { tr("PO token provider"),
           tr("Supplies the proof-of-origin tokens the service now demands for "
              "media URLs. Without one, downloads can fail with HTTP 403 part way "
              "through, at full speed, on videos that play fine in a browser."),
-          QStringLiteral("pipx inject yt-dlp bgutil-ytdlp-pot-provider"),
+          pick("pip install -U bgutil-ytdlp-pot-provider",
+               "pipx inject yt-dlp bgutil-ytdlp-pot-provider",
+               "pipx inject yt-dlp bgutil-ytdlp-pot-provider"),
           tr("Then set up the generator it talks to. The script option needs only "
              "the JavaScript runtime above - no Docker and no background service. "
              "See the README section on HTTP 403.") },
@@ -97,12 +130,23 @@ void SetupDialog::buildUi()
     intro->setObjectName(QStringLiteral("hint"));
     layout->addWidget(intro);
 
-    m_rows = new QVBoxLayout;
+    // The rows scroll: their explanatory notes are word-wrapped and grow, and a
+    // clipped instruction is worse than none.
+    auto *rowHost = new QWidget(this);
+    m_rows = new QVBoxLayout(rowHost);
+    m_rows->setContentsMargins(0, 0, 8, 0);
     m_rows->setSpacing(14);
-    layout->addLayout(m_rows);
 
     for (int i = 0; i < m_checks.size(); ++i)
         addCheckRow(i);
+    m_rows->addStretch();
+
+    auto *rowScroll = new QScrollArea(this);
+    rowScroll->setWidget(rowHost);
+    rowScroll->setWidgetResizable(true);
+    rowScroll->setFrameShape(QFrame::NoFrame);
+    rowScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    layout->addWidget(rowScroll, 3);
 
     layout->addSpacing(6);
     auto *outputLabel = new QLabel(tr("Details"), this);
@@ -162,25 +206,27 @@ void SetupDialog::addCheckRow(int index)
 
     auto *commandRow = new QHBoxLayout;
     auto *command = new QLineEdit(check.fixCommand, check.fixWidget);
+    check.fixEdit = command;
     command->setReadOnly(true);
     command->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     commandRow->addWidget(command, 1);
 
     auto *copy = new QPushButton(tr("Copy"), check.fixWidget);
-    const QString commandText = check.fixCommand;
-    connect(copy, &QPushButton::clicked, this, [this, commandText] {
-        QApplication::clipboard()->setText(commandText);
-        m_output->appendPlainText(tr("Copied: %1").arg(commandText));
+    // Reads the field rather than a copy, so a corrected command is what lands
+    // on the clipboard.
+    connect(copy, &QPushButton::clicked, this, [this, command] {
+        QApplication::clipboard()->setText(command->text());
+        m_output->appendPlainText(tr("Copied: %1").arg(command->text()));
     });
     commandRow->addWidget(copy);
     fixLayout->addLayout(commandRow);
 
-    if (!check.fixNote.isEmpty()) {
-        auto *note = new QLabel(check.fixNote, check.fixWidget);
-        note->setWordWrap(true);
-        note->setObjectName(QStringLiteral("hint"));
-        fixLayout->addWidget(note);
-    }
+    auto *note = new QLabel(check.fixNote, check.fixWidget);
+    note->setWordWrap(true);
+    note->setObjectName(QStringLiteral("hint"));
+    note->setVisible(!check.fixNote.isEmpty());
+    check.fixNoteLabel = note;
+    fixLayout->addWidget(note);
 
     check.fixWidget->hide();
     rowLayout->addWidget(check.fixWidget);
@@ -215,6 +261,19 @@ void SetupDialog::setResult(int index, Status status, const QString &detail)
 
     if (--m_pending <= 0)
         m_recheck->setEnabled(true);
+}
+
+void SetupDialog::setFix(int index, const QString &command, const QString &note)
+{
+    Check &check = m_checks[index];
+    check.fixCommand = command;
+    check.fixNote = note;
+    if (check.fixEdit)
+        check.fixEdit->setText(command);
+    if (check.fixNoteLabel) {
+        check.fixNoteLabel->setText(note);
+        check.fixNoteLabel->setVisible(!note.isEmpty());
+    }
 }
 
 void SetupDialog::runChecks()
@@ -327,6 +386,76 @@ void SetupDialog::checkFfmpeg(int index)
     setResult(index, Status::Good, ffmpeg);
 }
 
+void SetupDialog::readInstallDetails(const QString &verboseOutput)
+{
+    // "yt-dlp version stable@2026.07.04 from yt-dlp/yt-dlp [hash] (pip)"
+    static const QRegularExpression variant(
+        QStringLiteral("yt-dlp version[^\\n]*\\(([a-z_]+)\\)"));
+    const QRegularExpressionMatch match = variant.match(verboseOutput);
+    if (match.hasMatch())
+        m_ytDlpVariant = match.captured(1);
+
+    static const QRegularExpression dirs(QStringLiteral("Plugin directories: ([^\\n]+)"));
+    const QRegularExpressionMatch dirMatch = dirs.match(verboseOutput);
+    if (dirMatch.hasMatch()) {
+        m_pluginDirectories = dirMatch.captured(1).split(QStringLiteral(", "),
+                                                         Qt::SkipEmptyParts);
+    }
+}
+
+// A plugin only loads if it lands in the Python that yt-dlp itself runs.
+// pip and pipx builds share one; a standalone executable bundles its own, and
+// no pip command on the machine can reach it.
+bool SetupDialog::pluginsInstallViaPip() const
+{
+    return m_ytDlpVariant.isEmpty()
+           || m_ytDlpVariant == QLatin1String("pip")
+           || m_ytDlpVariant == QLatin1String("source");
+}
+
+QString SetupDialog::pluginDirectoryHint() const
+{
+    if (!m_pluginDirectories.isEmpty())
+        return m_pluginDirectories.first();
+#if defined(Q_OS_WIN)
+    return QStringLiteral("%APPDATA%\\yt-dlp\\plugins");
+#else
+    return QDir::homePath() + QStringLiteral("/.config/yt-dlp/plugins");
+#endif
+}
+
+void SetupDialog::applyPluginFixes()
+{
+    if (pluginsInstallViaPip())
+        return;
+
+    // A standalone build: pip cannot reach it, so the plugin has to be dropped
+    // into a directory it scans.
+    const QString dir = pluginDirectoryHint();
+    const QString openCommand =
+#if defined(Q_OS_WIN)
+        QStringLiteral("explorer \"%1\"").arg(dir);
+#else
+        QStringLiteral("xdg-open \"%1\"").arg(dir);
+#endif
+
+    setFix(kSolverIndex, openCommand,
+           tr("This yt-dlp is a standalone build (%1) with its own bundled Python, so "
+              "<tt>pip install</tt> cannot reach it. Simplest fix: reinstall yt-dlp "
+              "with <tt>pip install -U yt-dlp</tt> so both share one Python. "
+              "Otherwise extract the yt-dlp-ejs release archive into the directory "
+              "above, or enable \"Allow yt-dlp to download its challenge solver\" in "
+              "Preferences, which needs no plugin at all.").arg(m_ytDlpVariant));
+
+    setFix(kTokenIndex, openCommand,
+           tr("This yt-dlp is a standalone build (%1) with its own bundled Python, so "
+              "<tt>pip install</tt> installs the plugin somewhere it will never look. "
+              "Simplest fix: reinstall yt-dlp with <tt>pip install -U yt-dlp</tt> so "
+              "both share one Python, then install the plugin again. Otherwise extract "
+              "the bgutil-ytdlp-pot-provider <b>plugin</b> archive into the directory "
+              "above.").arg(m_ytDlpVariant));
+}
+
 void SetupDialog::checkChallengeSolver(int index)
 {
     auto *proc = new QProcess(this);
@@ -344,6 +473,8 @@ void SetupDialog::checkChallengeSolver(int index)
         const QString out = QString::fromUtf8(proc->readAllStandardError())
                             + QString::fromUtf8(proc->readAllStandardOutput());
         proc->deleteLater();
+        readInstallDetails(out);
+        applyPluginFixes();
 
         // yt-dlp lists what it loaded; the solver appears as yt_dlp_ejs.
         static const QRegularExpression ejs(QStringLiteral("yt[_-]dlp[_-]ejs[- ]?([0-9.]*)"));
@@ -386,6 +517,13 @@ void SetupDialog::checkTokenProvider(int index)
         const QString out = QString::fromUtf8(proc->readAllStandardError())
                             + QString::fromUtf8(proc->readAllStandardOutput());
         proc->deleteLater();
+        readInstallDetails(out);
+        applyPluginFixes();
+
+        if (!m_ytDlpVariant.isEmpty())
+            m_output->appendPlainText(tr("yt-dlp install type: %1").arg(m_ytDlpVariant));
+        for (const QString &dir : m_pluginDirectories)
+            m_output->appendPlainText(tr("Plugin directory: %1").arg(dir));
 
         // The extractor prints the providers it loaded, whatever they are.
         static const QRegularExpression re(

@@ -136,6 +136,15 @@ void VideoModel::refreshVideo(const VideoInfo &v)
     emit dataChanged(index(row), index(row));
 }
 
+void VideoModel::setShowChannel(bool show)
+{
+    if (m_showChannel == show)
+        return;
+    m_showChannel = show;
+    if (!m_videos.isEmpty())
+        emit dataChanged(index(0), index(m_videos.size() - 1), { ChannelTitleRole });
+}
+
 int VideoModel::rowCount(const QModelIndex &parent) const
 {
     return parent.isValid() ? 0 : m_videos.size();
@@ -171,6 +180,8 @@ QVariant VideoModel::data(const QModelIndex &index, int role) const
     case DateApproxRole:     return v.dateIsApproximate;
     case DurationRole:       return v.durationSecs;
     case ViewCountRole:      return v.viewCount;
+    case LikeCountRole:      return v.likeCount;
+    case ChannelTitleRole:   return m_showChannel ? v.channelTitle : QString();
     case StateRole:          return static_cast<int>(v.state);
     case ProgressRole:       return v.progress;
     case ProgressTextRole:   return v.progressText;

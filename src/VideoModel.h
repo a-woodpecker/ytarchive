@@ -20,6 +20,8 @@ public:
         DateApproxRole,
         DurationRole,
         ViewCountRole,
+        LikeCountRole,
+        ChannelTitleRole,
         StateRole,
         ThumbnailRole,
         ProgressRole,
@@ -32,6 +34,11 @@ public:
     explicit VideoModel(ThumbnailCache *thumbs, QObject *parent = nullptr);
 
     void setVideos(const QVector<VideoInfo> &videos);
+
+    // Whether cards should name their channel. Redundant inside one channel,
+    // essential in the combined view.
+    void setShowChannel(bool show);
+    bool showChannel() const { return m_showChannel; }
     const VideoInfo *videoAt(int row) const;
     QVector<VideoInfo> checkedVideos() const;
     QVector<VideoInfo> allVideos() const { return m_videos; }
@@ -60,6 +67,7 @@ private:
     QVector<VideoInfo>  m_videos;
     QHash<qint64, int>  m_rowByPk;
     ThumbnailCache     *m_thumbs;
+    bool                m_showChannel = false;
 };
 
 // Filters by free text and by download state.

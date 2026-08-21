@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19)
-project(YtArchive VERSION 0.2.1 LANGUAGES CXX)
+project(YtArchive VERSION 0.2.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,7 +15,15 @@ set(YTA_GITHUB_REPO "a-woodpecker/ytarchive"
 
 qt_standard_project_setup()
 
+# Compiled into the executable on Windows, giving it an icon in Explorer, the
+# taskbar and Alt-Tab. Ignored everywhere else.
+set(YTA_PLATFORM_SOURCES)
+if(WIN32)
+    list(APPEND YTA_PLATFORM_SOURCES resources/ytarchive.rc)
+endif()
+
 qt_add_executable(ytarchive
+    ${YTA_PLATFORM_SOURCES}
     src/main.cpp
     src/Models.h            src/Models.cpp
     src/Settings.h            src/Settings.cpp

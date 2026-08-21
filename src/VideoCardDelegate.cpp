@@ -50,6 +50,13 @@ QString metaLine(const QModelIndex &index)
         bits << QCoreApplication::translate("VideoCardDelegate", "%1 views")
                     .arg(formatCount(views));
 
+    // Only known after download, and null when the uploader hides it, so this
+    // is simply absent rather than shown as zero.
+    const qint64 likes = index.data(VideoModel::LikeCountRole).toLongLong();
+    if (likes >= 0)
+        bits << QCoreApplication::translate("VideoCardDelegate", "%1 likes")
+                    .arg(formatCount(likes));
+
     return bits.join(QStringLiteral("  ·  "));
 }
 
@@ -62,7 +69,7 @@ VideoCardDelegate::VideoCardDelegate(QObject *parent)
 
 QSize VideoCardDelegate::sizeHint(const QStyleOptionViewItem &, const QModelIndex &) const
 {
-    return { kCardWidth, kCardHeight };
+    return { kCardWidth, kCardHeight + (m_showChannel ? kChannelLineHeight : 0) };
 }
 
 QRect VideoCardDelegate::thumbRect(const QRect &card)
@@ -248,14 +255,29 @@ void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
                           Qt::AlignLeft | Qt::AlignVCenter, secondLine);
     }
 
+    // --- channel ------------------------------------------------------------
+    int metaTop = titleRect.bottom() + 4;
+    const QString channel = index.data(VideoModel::ChannelTitleRole).toString();
+    if (m_showChannel && !channel.isEmpty()) {
+        const QFont channelFont = derivedFont(option.font, -0.5, false);
+        painter->setFont(channelFont);
+        painter->setPen(t.meta);
+        const QFontMetrics channelFm(channelFont);
+        const QRect channelRect(titleRect.left(), metaTop,
+                                titleRect.width(), channelFm.height());
+        painter->drawText(channelRect, Qt::AlignLeft | Qt::AlignVCenter,
+                          channelFm.elidedText(channel, Qt::ElideRight,
+                                               channelRect.width()));
+        metaTop = channelRect.bottom() + 2;
+    }
+
     // --- metadata line -----------------------------------------------------
     const QFont metaFont = derivedFont(option.font, -0.5, false);
     painter->setFont(metaFont);
     painter->setPen(t.meta);
 
     const QFontMetrics metaFm(metaFont);
-    QRect metaRect(titleRect.left(), titleRect.bottom() + 4,
-                   titleRect.width(), metaFm.height());
+    QRect metaRect(titleRect.left(), metaTop, titleRect.width(), metaFm.height());
 
     QString meta = metaLine(index);
     if (state == DownloadState::Downloading) {

@@ -6,6 +6,7 @@
 #include <QVector>
 
 class QLabel;
+class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
 class QVBoxLayout;
@@ -33,6 +34,8 @@ private:
         QString  fixNote;
         Status   status = Status::Checking;
         QLabel  *statusLabel = nullptr;
+        QLineEdit *fixEdit = nullptr;    // so the command can be corrected later
+        QLabel  *fixNoteLabel = nullptr;
         QLabel  *detailLabel = nullptr;
         QWidget *fixWidget = nullptr;
     };
@@ -42,9 +45,26 @@ private:
     void runChecks();
     void setResult(int index, Status status, const QString &detail);
 
+    // Replaces a row's suggested command once we know how yt-dlp was installed.
+    // A plugin has to land in the Python that yt-dlp actually runs, and for a
+    // standalone build that is not any Python the user can pip into.
+    void setFix(int index, const QString &command, const QString &note);
+
+    // Parsed from yt-dlp's own -v output.
+    QString m_ytDlpVariant;             // "pip", "win_exe", "zip", ...
+    QStringList m_pluginDirectories;
+
     void checkYtDlp(int index);
     void checkRuntime(int index);
     void checkFfmpeg(int index);
+    void readInstallDetails(const QString &verboseOutput);
+    bool pluginsInstallViaPip() const;
+    QString pluginDirectoryHint() const;
+    void applyPluginFixes();
+
+    static constexpr int kSolverIndex = 3;
+    static constexpr int kTokenIndex = 4;
+
     void checkChallengeSolver(int index);
     void checkTokenProvider(int index);
 

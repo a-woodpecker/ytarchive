@@ -40,7 +40,9 @@ public:
                         const QString &filePath,
                         const QString &infoJsonPath,
                         qint64 fileSize,
-                        const QDateTime &confirmedUploadDate);
+                        const QDateTime &confirmedUploadDate,
+                        qint64 likeCount = -1,
+                        qint64 viewCount = -1);
     bool clearDownload(qint64 pk);
 
     // Marks rows whose media file has vanished from disk.

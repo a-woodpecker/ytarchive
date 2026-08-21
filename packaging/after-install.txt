@@ -6,10 +6,17 @@ YT Archive needs two external tools to do its work:
 Neither is bundled, so that each can be updated independently. yt-dlp in
 particular needs updating often, because YouTube changes frequently.
 
-The quickest way to install both, in a Command Prompt:
+In a Command Prompt:
 
-  winget install -e --id yt-dlp.yt-dlp
   winget install -e --id Gyan.FFmpeg
+  pip install -U yt-dlp
+
+Install yt-dlp with pip rather than winget. The winget package carries its own
+bundled Python, and the plugins needed for age-restricted videos and for signing
+media URLs can then never be found - pip reports success while installing them
+somewhere yt-dlp never reads. If you do not have Python, run
+  winget install -e --id Python.Python.3.13
+first.
 
 Then reopen your terminal and check they respond:
 

@@ -1,0 +1,4 @@
+// Gives the executable its icon in Explorer, the taskbar and Alt-Tab.
+// Windows uses the numerically lowest icon resource as the application icon,
+// so this must stay ID 1.
+1 ICON "ytarchive.ico"
