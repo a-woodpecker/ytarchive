@@ -498,12 +498,44 @@ have. Column order is read from the header, so a file with columns rearranged or
 removed still imports, and `video_id` can be recovered from a watch URL if that
 column is absent. Importing the same file twice adds nothing the second time.
 
-**Download state, file paths and checksums are deliberately not imported.**
-They describe the disk of whichever machine produced the export. Importing them
-would mark videos as archived when nothing is on disk here, and record checksums
-for files that do not exist. After importing, refresh the channels and download
-what you want - the archive itself is never described by a file from somewhere
-else.
+**Download state, file paths and checksums are never taken from the CSV.** They
+describe the disk of whichever machine produced the export, and trusting them
+would mark videos as archived with nothing on disk. Instead, the import looks in
+the archive folder itself - see below.
+
+## Re-adopting an existing archive
+
+The catalog can be rebuilt without re-downloading anything. After an import, and
+from **File > Rescan the archive folder**, the archive is searched for media
+belonging to catalogued videos, and whatever is found is marked as held.
+
+Matching is by the video id embedded in the filename by the default template:
+
+```
+2024-03-11 [dQw4w9WgXcQ] Steam-Bending the New Frames.mkv
+                ^^^^^^^^^^^ this
+```
+
+That id survives moving between machines, renamed channel folders and a
+different archive root - none of which a stored absolute path does. A title
+containing its own brackets is handled: every bracketed group is looked up, not
+just the first.
+
+What the scan picks up along the way:
+
+- the file's size, and its `.info.json` if present
+- the exact upload date and the like count from that metadata
+- an existing `.sha256` sidecar, adopted as written rather than recomputed - it
+  records what the file was when archived, and re-hashing now would quietly
+  bless a file that had changed since
+
+Partial downloads under `.incomplete` are ignored, files belonging to no
+catalogued video are counted and left alone, and nothing is moved, renamed or
+deleted. Running it twice adopts nothing the second time.
+
+So a lost catalog is recoverable: re-add the channels and refresh, or import a
+CSV export, then rescan. The archive on disk is the record; the catalog is an
+index over it.
 
 ## Checksums
 
@@ -578,6 +610,7 @@ canvas, so a light version would vanish against pale thumbnails.
 | `ChannelSync.*` | two-stage streaming channel listing via `QProcess` |
 | `ChecksumService.*` | background SHA-256 hashing and verification |
 | `CsvIo.*` | RFC 4180 CSV reading and writing for the catalog |
+| `ArchiveScanner.*` | matches files on disk to catalog entries by video id |
 | `DownloadManager.*` | bounded concurrent queue, progress parsing, timestamp stamping |
 | `VideoModel.*` | list model plus search/state filter proxy |
 | `VideoCardDelegate.*` | the painted video card |
@@ -1017,8 +1050,8 @@ Worth reading before trusting this with an archive you care about.
 - Re-downloading at higher quality is unsupported. *Forget the downloaded copy*
   clears the catalog entry but leaves the file, so you get duplicates.
 - Absolute paths are stored, so moving the archive folder makes every entry
-  report as missing. There is no re-basing tool, and a catalog is not portable
-  between machines or operating systems.
+  report as missing until **File > Rescan the archive folder** matches the files
+  up again by id.
 
 **Dependency on yt-dlp**
 - Every listing and download shells out to yt-dlp. If the service changes and
@@ -1051,7 +1084,6 @@ Worth reading before trusting this with an archive you care about.
 
 - **Scheduled syncs.** A `QTimer` plus a "watch this channel" flag gives
   automatic capture of new uploads.
-- **Path re-basing**, so an archive can move between drives or machines.
 
 ## Legal note
 

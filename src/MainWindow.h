@@ -59,6 +59,7 @@ private slots:
     void cancelAllDownloads();
     void verifyArchive();
     void exportCsv();
+    void rescanArchive();
     void importCsv();
     void checkForUpdates();
     void checkYtDlpVersion();

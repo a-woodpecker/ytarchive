@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include "ArchiveScanner.h"
 #include "CsvIo.h"
 #include "DownloadsPanel.h"
 #include "PreferencesDialog.h"
@@ -552,6 +553,8 @@ void MainWindow::buildActions()
     fileMenu->addSeparator();
     fileMenu->addAction(tr("&Export what is shown to CSV…"), this, &MainWindow::exportCsv);
     fileMenu->addAction(tr("&Import from CSV…"), this, &MainWindow::importCsv);
+    fileMenu->addSeparator();
+    fileMenu->addAction(tr("&Rescan the archive folder…"), this, &MainWindow::rescanArchive);
     fileMenu->addSeparator();
     fileMenu->addAction(tr("&Preferences…"), QKeySequence::Preferences,
                         this, &MainWindow::openPreferences);
@@ -1318,6 +1321,11 @@ void MainWindow::importCsv()
         return;
     }
 
+    // Imported rows describe videos, not files. Anything already sitting in the
+    // archive folder is adopted here, which is what makes a catalog rebuildable
+    // rather than only re-downloadable.
+    const Archive::ScanResult scan = Archive::adopt(m_db, m_settings.archiveRoot);
+
     reloadChannels(currentChannelPk());
     updateCounters();
 
@@ -1332,11 +1340,65 @@ void MainWindow::importCsv()
     for (const QString &problem : result.problems)
         m_log->appendPlainText(QStringLiteral("  ") + problem);
 
+    QString detail;
+    if (scan.adopted > 0) {
+        detail = tr("%n of them were found in the archive folder and marked as held.",
+                    "", scan.adopted);
+    } else {
+        detail = tr("None were found in the archive folder, so nothing was marked as "
+                    "held.");
+    }
+    detail += QStringLiteral("\n\n")
+              + tr("File locations and download state are never taken from the CSV "
+                   "itself: they describe the machine it came from. Videos are matched "
+                   "to files by the id in their filename instead.");
+
+    m_log->appendPlainText(tr("Adopted %n file(s) from the archive folder.",
+                              "", scan.adopted));
     QMessageBox::information(this, tr("Import finished"),
-        summary + QStringLiteral("\n\n")
-        + tr("Download state, file locations and checksums were not imported: they "
-             "describe the machine the file came from. Use Refresh to bring the "
-             "listings up to date, then download what you want."));
+                             summary + QStringLiteral("\n") + detail);
+}
+
+void MainWindow::rescanArchive()
+{
+    if (!QFileInfo(m_settings.archiveRoot).isDir()) {
+        QMessageBox::warning(this, tr("No archive folder"),
+            tr("The archive folder does not exist:\n%1").arg(m_settings.archiveRoot));
+        return;
+    }
+
+    const auto answer = QMessageBox::question(
+        this, tr("Rescan the archive folder"),
+        tr("Look through\n%1\nfor media belonging to videos in the catalog, and mark "
+           "what is found as held?\n\nVideos are matched by the id in their filename, "
+           "so files keep their identity across machines and renamed folders. Nothing "
+           "is downloaded, moved or deleted.").arg(m_settings.archiveRoot),
+        QMessageBox::Cancel | QMessageBox::Yes, QMessageBox::Yes);
+    if (answer != QMessageBox::Yes)
+        return;
+
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    const Archive::ScanResult scan = Archive::adopt(m_db, m_settings.archiveRoot);
+    m_db.reconcileWithDisk();
+    QApplication::restoreOverrideCursor();
+
+    reloadChannels(currentChannelPk());
+    updateCounters();
+
+    const QString summary =
+        tr("Looked at %n media file(s).", "", scan.filesSeen)
+        + QStringLiteral(" ")
+        + tr("Adopted %n.", "", scan.adopted)
+        + (scan.alreadyArchived > 0
+               ? QStringLiteral(" ") + tr("%n were already held.", "", scan.alreadyArchived)
+               : QString())
+        + (scan.unmatched > 0
+               ? QStringLiteral(" ") + tr("%n did not match anything in the catalog.",
+                                          "", scan.unmatched)
+               : QString());
+
+    m_log->appendPlainText(summary);
+    QMessageBox::information(this, tr("Rescan finished"), summary);
 }
 
 void MainWindow::checkForUpdates()

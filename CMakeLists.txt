@@ -31,6 +31,7 @@ qt_add_executable(ytarchive
     src/FileTime.h            src/FileTime.cpp
     src/Database.h            src/Database.cpp
     src/YtDlp.h               src/YtDlp.cpp
+    src/ArchiveScanner.h      src/ArchiveScanner.cpp
     src/ChannelSync.h         src/ChannelSync.cpp
     src/ChecksumService.h     src/ChecksumService.cpp
     src/CsvIo.h               src/CsvIo.cpp
