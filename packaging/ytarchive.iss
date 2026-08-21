@@ -1,11 +1,11 @@
 ; Inno Setup script for YT Archive.
 ;
-; Build with:  iscc /DAppVersion=0.3.0 packaging\ytarchive.iss
+; Build with:  iscc /DAppVersion=0.4.0 packaging\ytarchive.iss
 ; Expects packaging\staging\ to hold a windeployqt-processed build. The
 ; build-installer.ps1 script in this folder does all of that for you.
 
 #ifndef AppVersion
-  #define AppVersion "0.3.0"
+  #define AppVersion "0.4.0"
 #endif
 
 #define AppName       "YT Archive"
