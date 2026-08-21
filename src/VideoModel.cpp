@@ -182,6 +182,7 @@ QVariant VideoModel::data(const QModelIndex &index, int role) const
     case ViewCountRole:      return v.viewCount;
     case LikeCountRole:      return v.likeCount;
     case ChannelTitleRole:   return m_showChannel ? v.channelTitle : QString();
+    case KindRole:           return static_cast<int>(v.kind);
     case StateRole:          return static_cast<int>(v.state);
     case ProgressRole:       return v.progress;
     case ProgressTextRole:   return v.progressText;
@@ -232,6 +233,12 @@ void VideoFilterProxy::setStateFilter(StateFilter f)
     invalidateFilter();
 }
 
+void VideoFilterProxy::setKindFilter(KindFilter f)
+{
+    m_kindFilter = f;
+    invalidateFilter();
+}
+
 bool VideoFilterProxy::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const
 {
     const QModelIndex idx = sourceModel()->index(sourceRow, 0, sourceParent);
@@ -242,6 +249,16 @@ bool VideoFilterProxy::filterAcceptsRow(int sourceRow, const QModelIndex &source
         const QString title = idx.data(VideoModel::TitleRole).toString();
         if (!title.contains(m_search, Qt::CaseInsensitive))
             return false;
+    }
+
+    if (m_kindFilter != AnyKind) {
+        const auto kind = static_cast<VideoKind>(idx.data(VideoModel::KindRole).toInt());
+        switch (m_kindFilter) {
+        case OnlyVideos:      if (kind != VideoKind::Video) return false; break;
+        case OnlyShorts:      if (kind != VideoKind::Short) return false; break;
+        case OnlyLivestreams: if (kind != VideoKind::Livestream) return false; break;
+        case AnyKind:         break;
+        }
     }
 
     const auto state = static_cast<DownloadState>(idx.data(VideoModel::StateRole).toInt());

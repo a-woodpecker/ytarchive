@@ -5,6 +5,7 @@
 
 #include <QJsonObject>
 #include <QStringList>
+#include <QVector>
 
 // Thin, well-documented seam around the yt-dlp command line.
 // Keeping every argument in one place makes the tool's behaviour auditable,
@@ -20,7 +21,7 @@ QStringList listFormatsArgs(const QString &videoUrl, const Settings &settings);
 //
 // Uses --dump-json, not --dump-single-json: one JSON object per line, streamed
 // as videos are discovered, so the caller can report progress as it goes.
-QStringList channelListArgs(const QString &channelUrl, const Settings &settings);
+QStringList channelListArgs(const QString &tabUrl, const Settings &settings);
 
 // Arguments that fetch only the playlist header - used to resolve a pasted
 // URL into a canonical channel id and title before committing it to the catalog.
@@ -42,8 +43,14 @@ bool needsAuthentication(const QString &rawError);
 bool formatUnavailable(const QString &rawError);
 
 // Normalises whatever the user pasted (handle, /c/ URL, /channel/UC..., a video
-// URL) into a channel uploads URL. Returns an empty string if unusable.
+// URL) into a bare channel URL with no tab. Returns an empty string if unusable.
 QString normalizeChannelUrl(const QString &input);
+
+// The listing URL for one tab of a channel.
+QString tabUrl(const QString &channelUrl, VideoKind kind);
+
+// Which tabs the settings ask for, in listing order.
+QVector<VideoKind> enabledKinds(const Settings &settings);
 
 // Parsers
 ChannelInfo parseChannelHeader(const QJsonObject &root);

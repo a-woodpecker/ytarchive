@@ -16,6 +16,16 @@ QString downloadStateLabel(DownloadState s)
     return QString();
 }
 
+QString videoKindLabel(VideoKind kind)
+{
+    switch (kind) {
+    case VideoKind::Short:      return QCoreApplication::translate("kind", "Short");
+    case VideoKind::Livestream: return QCoreApplication::translate("kind", "Livestream");
+    case VideoKind::Video:      break;
+    }
+    return QCoreApplication::translate("kind", "Video");
+}
+
 QString formatDuration(qint64 seconds)
 {
     if (seconds <= 0)

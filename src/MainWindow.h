@@ -9,6 +9,7 @@
 #include "UpdateChecker.h"
 
 #include <QMainWindow>
+#include <QModelIndexList>
 
 class QListWidget;
 class QListView;
@@ -70,6 +71,17 @@ private:
     void reloadVideos();
     void updateCounters();
     void updateRetryButton();
+
+    // Everything the filters are currently letting through. Toolbar actions
+    // work on this rather than the whole channel: a button that says "Select
+    // all" while a filter is applied must mean the visible all.
+    QVector<VideoInfo> visibleVideos() const;
+    QModelIndexList visibleSourceRows() const;
+
+    // Keeps the count beside the download buttons honest about anything a
+    // filter is hiding.
+    void refreshSelectionLabel();
+    void onFilterChanged();
     void enqueue(const QVector<VideoInfo> &videos);
     qint64 currentChannelPk() const;
     ChannelInfo currentChannel() const;
@@ -97,6 +109,7 @@ private:
     VideoCardDelegate *m_cardDelegate = nullptr;
     QLineEdit   *m_search = nullptr;
     QComboBox   *m_stateFilter = nullptr;
+    QComboBox   *m_kindFilter = nullptr;
     QLabel      *m_headerTitle = nullptr;
     QLabel      *m_headerMeta = nullptr;
     QLabel      *m_selectionLabel = nullptr;

@@ -22,6 +22,7 @@ public:
         ViewCountRole,
         LikeCountRole,
         ChannelTitleRole,
+        KindRole,
         StateRole,
         ThumbnailRole,
         ProgressRole,
@@ -76,11 +77,13 @@ class VideoFilterProxy : public QSortFilterProxyModel
     Q_OBJECT
 public:
     enum StateFilter { AnyState, OnlyDownloaded, OnlyNotDownloaded, OnlyFailed };
+    enum KindFilter  { AnyKind, OnlyVideos, OnlyShorts, OnlyLivestreams };
 
     using QSortFilterProxyModel::QSortFilterProxyModel;
 
     void setSearchText(const QString &text);
     void setStateFilter(StateFilter f);
+    void setKindFilter(KindFilter f);
 
 protected:
     bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const override;
@@ -88,4 +91,5 @@ protected:
 private:
     QString     m_search;
     StateFilter m_stateFilter = AnyState;
+    KindFilter  m_kindFilter = AnyKind;
 };

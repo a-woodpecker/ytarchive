@@ -275,6 +275,51 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
 
     tabs->addTab(scrollable(downloads), tr("Downloading"));
 
+    // ---- Content ----------------------------------------------------------
+    auto *content = new QWidget(this);
+    auto *contentLayout = new QVBoxLayout(content);
+
+    auto *contentIntro = new QLabel(
+        tr("A channel keeps its regular uploads, its shorts and its past livestreams "
+           "on separate tabs, and listing one says nothing about the others. Choose "
+           "which to catalogue; each is a separate request when a channel is "
+           "refreshed."), this);
+    contentIntro->setWordWrap(true);
+    contentIntro->setObjectName(QStringLiteral("hint"));
+    contentLayout->addWidget(contentIntro);
+
+    auto addContentCheck = [&](QCheckBox *&target, const QString &text,
+                               const QString &note, bool value) {
+        target = new QCheckBox(text, this);
+        target->setChecked(value);
+        contentLayout->addWidget(target);
+        auto *hint = new QLabel(note, this);
+        hint->setWordWrap(true);
+        hint->setObjectName(QStringLiteral("hint"));
+        hint->setContentsMargins(22, 0, 0, 8);
+        contentLayout->addWidget(hint);
+    };
+
+    addContentCheck(m_syncVideos, tr("Videos"),
+        tr("The uploads tab. Every channel has one."), current.syncVideos);
+    addContentCheck(m_syncShorts, tr("Shorts"),
+        tr("Vertical short-form uploads. A channel that posts mostly shorts looks "
+           "nearly empty without this."), current.syncShorts);
+    addContentCheck(m_syncLivestreams, tr("Livestreams"),
+        tr("Past broadcasts. These are often long, and a channel that streams "
+           "regularly can add a great deal to an archive."), current.syncLivestreams);
+
+    auto *contentNote = new QLabel(
+        tr("Changing this affects the next refresh. Videos already catalogued stay "
+           "where they are; use <b>Channel &gt; Refresh video list</b> to pick up a "
+           "newly enabled type."), this);
+    contentNote->setWordWrap(true);
+    contentNote->setObjectName(QStringLiteral("hint"));
+    contentLayout->addWidget(contentNote);
+    contentLayout->addStretch();
+
+    tabs->addTab(scrollable(content), tr("Content"));
+
     // ---- What to keep -----------------------------------------------------
     auto *artefacts = new QWidget(this);
     auto *artefactLayout = new QVBoxLayout(artefacts);
@@ -449,6 +494,9 @@ Settings PreferencesDialog::result() const
     s.maxConcurrent     = m_concurrency->value();
     s.rateLimitKiB      = m_rateLimit->value();
     s.retries           = m_retries->value();
+    s.syncVideos        = m_syncVideos->isChecked();
+    s.syncShorts        = m_syncShorts->isChecked();
+    s.syncLivestreams   = m_syncLivestreams->isChecked();
     s.extractorRetries  = m_extractorRetries->value();
     s.sleepRequests     = m_sleepRequests->value();
     s.sleepInterval     = m_sleepInterval->value();

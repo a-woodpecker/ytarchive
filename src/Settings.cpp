@@ -43,6 +43,9 @@ Settings Settings::load()
     v.mergeContainer    = s.value("mergeContainer", v.mergeContainer).toString();
     v.rateLimitKiB      = s.value("rateLimitKiB", 0).toInt();
     v.retries           = s.value("retries", v.retries).toInt();
+    v.syncVideos        = s.value("syncVideos", true).toBool();
+    v.syncShorts        = s.value("syncShorts", false).toBool();
+    v.syncLivestreams   = s.value("syncLivestreams", false).toBool();
     v.extractorRetries  = s.value("extractorRetries", v.extractorRetries).toInt();
     v.sleepRequests     = s.value("sleepRequests", 0).toInt();
     v.sleepInterval     = s.value("sleepInterval", 0).toInt();
@@ -86,6 +89,9 @@ void Settings::save() const
     s.setValue("mergeContainer", mergeContainer);
     s.setValue("rateLimitKiB", rateLimitKiB);
     s.setValue("retries", retries);
+    s.setValue("syncVideos", syncVideos);
+    s.setValue("syncShorts", syncShorts);
+    s.setValue("syncLivestreams", syncLivestreams);
     s.setValue("extractorRetries", extractorRetries);
     s.setValue("sleepRequests", sleepRequests);
     s.setValue("sleepInterval", sleepInterval);

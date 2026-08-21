@@ -54,6 +54,9 @@ private:
     QCheckBox *m_embedMetadata;
     QCheckBox *m_embedChapters;
     QCheckBox *m_checksumDownloads;
+    QCheckBox *m_syncVideos;
+    QCheckBox *m_syncShorts;
+    QCheckBox *m_syncLivestreams;
     QCheckBox *m_checkUpdates;
     QComboBox *m_theme;
 };

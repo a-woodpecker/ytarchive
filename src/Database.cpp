@@ -44,6 +44,7 @@ VideoInfo readVideo(const QSqlQuery &q)
     v.dateIsApproximate= q.value("date_approx").toInt() != 0;
     v.durationSecs     = q.value("duration").toLongLong();
     v.viewCount        = q.value("view_count").toLongLong();
+    v.kind             = static_cast<VideoKind>(q.value("kind").toInt());
     v.likeCount        = q.value("like_count").toLongLong();
     v.sha256           = q.value("sha256").toString();
     v.hashedAt         = dtFromDb(q.value("hashed_at"));
@@ -135,7 +136,8 @@ bool Database::applySchema(QString *error)
         // existing catalog, and it is harmless to attempt every start-up.
         QStringLiteral("ALTER TABLE videos ADD COLUMN like_count INTEGER NOT NULL DEFAULT -1"),
         QStringLiteral("ALTER TABLE videos ADD COLUMN sha256 TEXT"),
-        QStringLiteral("ALTER TABLE videos ADD COLUMN hashed_at INTEGER")
+        QStringLiteral("ALTER TABLE videos ADD COLUMN hashed_at INTEGER"),
+        QStringLiteral("ALTER TABLE videos ADD COLUMN kind INTEGER NOT NULL DEFAULT 0")
     };
 
     QSqlQuery q(m_db);
@@ -243,12 +245,18 @@ int Database::upsertVideos(qint64 channelPk, const QVector<VideoInfo> &videos, i
     QSqlQuery q(m_db);
     q.prepare(QStringLiteral(
         "INSERT INTO videos (video_id, channel_id, title, description, thumb_url,"
-        "                    upload_date, date_approx, duration, view_count, first_seen) "
-        "VALUES (:vid, :cid, :title, :desc, :thumb, :date, :approx, :dur, :views, :seen) "
+        "                    upload_date, date_approx, duration, view_count, kind,"
+        "                    first_seen) "
+        "VALUES (:vid, :cid, :title, :desc, :thumb, :date, :approx, :dur, :views, :kind,"
+        "        :seen) "
         "ON CONFLICT(video_id) DO UPDATE SET "
         "  title      = COALESCE(NULLIF(excluded.title,''), videos.title),"
         "  thumb_url  = COALESCE(NULLIF(excluded.thumb_url,''), videos.thumb_url),"
         "  duration   = MAX(excluded.duration, videos.duration),"
+        // A past livestream also appears on the uploads tab. Whichever listing
+        // identified it as something other than a plain video was the better
+        // informed, so a specific kind is never overwritten by the default.
+        "  kind = CASE WHEN videos.kind = 0 THEN excluded.kind ELSE videos.kind END,"
         "  view_count = MAX(excluded.view_count, videos.view_count),"
         // Only overwrite the date while ours is still the approximate one.
         "  upload_date = CASE WHEN videos.date_approx = 1 AND excluded.upload_date IS NOT NULL"
@@ -276,6 +284,7 @@ int Database::upsertVideos(qint64 channelPk, const QVector<VideoInfo> &videos, i
         q.bindValue(":approx", v.dateIsApproximate ? 1 : 0);
         q.bindValue(":dur",    v.durationSecs);
         q.bindValue(":views",  v.viewCount);
+        q.bindValue(":kind",   static_cast<int>(v.kind));
         q.bindValue(":seen",   now);
         if (q.exec()) {
             ++changed;

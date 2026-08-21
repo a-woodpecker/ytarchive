@@ -242,11 +242,8 @@ MainWindow::MainWindow(QWidget *parent)
             QMessageBox::warning(this, tr("Could not check for updates"), message);
     });
 
-    connect(m_model, &VideoModel::checkedCountChanged, this, [this](int n) {
-        m_selectionLabel->setText(n == 0 ? tr("Nothing selected")
-                                         : tr("%n video(s) selected", "", n));
-        m_downloadButton->setEnabled(n > 0);
-    });
+    connect(m_model, &VideoModel::checkedCountChanged, this,
+            [this](int) { refreshSelectionLabel(); });
 
     if (openCatalog()) {
         m_db.reconcileWithDisk();
@@ -408,7 +405,10 @@ void MainWindow::buildUi()
     m_search->setClearButtonEnabled(true);
     m_search->setMinimumWidth(220);
     m_search->setMaximumWidth(340);
-    connect(m_search, &QLineEdit::textChanged, m_proxy, &VideoFilterProxy::setSearchText);
+    connect(m_search, &QLineEdit::textChanged, this, [this](const QString &text) {
+        m_proxy->setSearchText(text);
+        onFilterChanged();
+    });
     barLayout->addWidget(m_search);
 
     m_stateFilter = new QComboBox(bar);
@@ -419,23 +419,47 @@ void MainWindow::buildUi()
     connect(m_stateFilter, &QComboBox::currentIndexChanged, this, [this](int i) {
         m_proxy->setStateFilter(
             static_cast<VideoFilterProxy::StateFilter>(m_stateFilter->itemData(i).toInt()));
+        onFilterChanged();
     });
     barLayout->addWidget(m_stateFilter);
 
+    m_kindFilter = new QComboBox(bar);
+    m_kindFilter->addItem(tr("All types"), VideoFilterProxy::AnyKind);
+    m_kindFilter->addItem(tr("Videos"), VideoFilterProxy::OnlyVideos);
+    m_kindFilter->addItem(tr("Shorts"), VideoFilterProxy::OnlyShorts);
+    m_kindFilter->addItem(tr("Livestreams"), VideoFilterProxy::OnlyLivestreams);
+    connect(m_kindFilter, &QComboBox::currentIndexChanged, this, [this](int i) {
+        m_proxy->setKindFilter(
+            static_cast<VideoFilterProxy::KindFilter>(m_kindFilter->itemData(i).toInt()));
+        onFilterChanged();
+    });
+    barLayout->addWidget(m_kindFilter);
+
     auto *selectAll = new QToolButton(bar);
     selectAll->setText(tr("Select all"));
-    connect(selectAll, &QToolButton::clicked, this, [this] { m_model->setAllChecked(true); });
+    connect(selectAll, &QToolButton::clicked, this, [this] {
+        m_model->setCheckedForRows(visibleSourceRows(), true);
+    });
     barLayout->addWidget(selectAll);
 
     auto *selectNone = new QToolButton(bar);
     selectNone->setText(tr("Clear selection"));
+    // Clears everything, visible or not: leaving a hidden video checked would
+    // put it into the next download without appearing anywhere on screen.
     connect(selectNone, &QToolButton::clicked, this, [this] { m_model->setAllChecked(false); });
     barLayout->addWidget(selectNone);
 
     auto *selectMissing = new QToolButton(bar);
     selectMissing->setText(tr("Select not archived"));
     connect(selectMissing, &QToolButton::clicked, this, [this] {
-        m_model->checkOnly(DownloadState::NotDownloaded);
+        m_model->setAllChecked(false);
+        QModelIndexList rows;
+        for (const QModelIndex &index : visibleSourceRows()) {
+            const VideoInfo *v = m_model->videoAt(index.row());
+            if (v && v->state != DownloadState::Downloaded)
+                rows << index;
+        }
+        m_model->setCheckedForRows(rows, true);
     });
     barLayout->addWidget(selectMissing);
 
@@ -674,6 +698,7 @@ void MainWindow::reloadVideos()
 
     m_model->setVideos(m_db.videos(currentChannelPk()));
     m_grid->scrollToTop();
+    refreshSelectionLabel();
 }
 
 void MainWindow::updateCounters()
@@ -866,13 +891,65 @@ void MainWindow::downloadChecked()
     enqueue(m_model->checkedVideos());
 }
 
+void MainWindow::refreshSelectionLabel()
+{
+    const int total = m_model->checkedCount();
+
+    int visible = 0;
+    for (const QModelIndex &index : visibleSourceRows()) {
+        const VideoInfo *v = m_model->videoAt(index.row());
+        if (v && v->checked)
+            ++visible;
+    }
+    const int hidden = total - visible;
+
+    if (total == 0) {
+        m_selectionLabel->setText(tr("Nothing selected"));
+    } else if (hidden > 0) {
+        // Downloading would include these, so saying so is the difference
+        // between a filter and a trap.
+        m_selectionLabel->setText(tr("%n selected", "", total)
+                                  + QStringLiteral("  ")
+                                  + tr("(%n hidden by the filter)", "", hidden));
+    } else {
+        m_selectionLabel->setText(tr("%n video(s) selected", "", total));
+    }
+    m_downloadButton->setEnabled(total > 0);
+}
+
+void MainWindow::onFilterChanged()
+{
+    refreshSelectionLabel();
+    updateRetryButton();
+}
+
+QModelIndexList MainWindow::visibleSourceRows() const
+{
+    QModelIndexList rows;
+    const int count = m_proxy->rowCount();
+    rows.reserve(count);
+    for (int i = 0; i < count; ++i)
+        rows << m_proxy->mapToSource(m_proxy->index(i, 0));
+    return rows;
+}
+
+QVector<VideoInfo> MainWindow::visibleVideos() const
+{
+    QVector<VideoInfo> out;
+    for (const QModelIndex &index : visibleSourceRows()) {
+        if (const VideoInfo *v = m_model->videoAt(index.row()))
+            out.append(*v);
+    }
+    return out;
+}
+
 void MainWindow::updateRetryButton()
 {
     if (!m_retryFailedButton)
         return;
 
     int failed = 0;
-    for (const VideoInfo &v : m_model->allVideos())
+    for (const VideoInfo &v : visibleVideos())
         if (v.state == DownloadState::Failed || v.state == DownloadState::Missing)
             ++failed;
 
@@ -883,7 +960,7 @@ void MainWindow::updateRetryButton()
 void MainWindow::retryFailedDownloads()
 {
     QVector<VideoInfo> failed;
-    for (const VideoInfo &v : m_model->allVideos())
+    for (const VideoInfo &v : visibleVideos())
         if (v.state == DownloadState::Failed || v.state == DownloadState::Missing)
             failed.append(v);
 
@@ -904,7 +981,7 @@ void MainWindow::retryFailedDownloads()
 void MainWindow::downloadEverythingMissing()
 {
     QVector<VideoInfo> missing;
-    for (const VideoInfo &v : m_model->allVideos())
+    for (const VideoInfo &v : visibleVideos())
         if (v.state != DownloadState::Downloaded && v.state != DownloadState::Queued &&
             v.state != DownloadState::Downloading)
             missing.append(v);

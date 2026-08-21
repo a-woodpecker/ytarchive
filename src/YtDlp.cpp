@@ -271,7 +271,34 @@ QString normalizeChannelUrl(const QString &input)
     if (path.isEmpty())
         return QString();
 
-    return QStringLiteral("https://www.youtube.com") + path + QStringLiteral("/videos");
+    return QStringLiteral("https://www.youtube.com") + path;
+}
+
+QString tabUrl(const QString &channelUrl, VideoKind kind)
+{
+    QString base = channelUrl;
+    while (base.endsWith(QChar('/')))
+        base.chop(1);
+
+    switch (kind) {
+    case VideoKind::Short:      return base + QStringLiteral("/shorts");
+    case VideoKind::Livestream: return base + QStringLiteral("/streams");
+    case VideoKind::Video:      break;
+    }
+    return base + QStringLiteral("/videos");
+}
+
+QVector<VideoKind> enabledKinds(const Settings &settings)
+{
+    QVector<VideoKind> kinds;
+    if (settings.syncVideos)      kinds << VideoKind::Video;
+    if (settings.syncShorts)      kinds << VideoKind::Short;
+    if (settings.syncLivestreams) kinds << VideoKind::Livestream;
+    // Listing nothing would look like a broken channel, so fall back to the
+    // tab every channel has.
+    if (kinds.isEmpty())
+        kinds << VideoKind::Video;
+    return kinds;
 }
 
 ChannelInfo parseChannelHeader(const QJsonObject &root)
@@ -372,6 +399,14 @@ VideoInfo parseFlatEntry(const QJsonObject &entry)
     if (ts > 0) {
         v.uploadDate = QDateTime::fromSecsSinceEpoch(ts, Qt::UTC);
         v.dateIsApproximate = true;
+    }
+
+    // A past livestream often also appears on the uploads tab, and the entry
+    // says so; trust that over the tab it happened to be listed under.
+    const QString liveStatus = entry.value(QStringLiteral("live_status")).toString();
+    if (liveStatus == QLatin1String("was_live") || liveStatus == QLatin1String("is_live")
+        || liveStatus == QLatin1String("post_live")) {
+        v.kind = VideoKind::Livestream;
     }
 
     const QString uploadDate = entry.value(QStringLiteral("upload_date")).toString();

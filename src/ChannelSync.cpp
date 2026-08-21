@@ -40,6 +40,7 @@ void ChannelSync::start(const QString &input)
     m_stderr.clear();
     m_expectedTotal = -1;
     m_cancelRequested = false;
+    m_pendingKinds = YtDlp::enabledKinds(m_settings);
 
     startProbe();
 }
@@ -72,7 +73,10 @@ void ChannelSync::startProbe()
     m_stage = Stage::Probing;
 
     m_process = makeProcess();
-    m_process->setArguments(YtDlp::channelProbeArgs(m_url, m_settings));
+    // Probed through the uploads tab: every channel has one, and the header is
+    // the same whichever tab it comes from.
+    m_process->setArguments(
+        YtDlp::channelProbeArgs(YtDlp::tabUrl(m_url, VideoKind::Video), m_settings));
 
     connect(m_process, &QProcess::readyReadStandardOutput, this, [this] {
         m_probeStdout += m_process->readAllStandardOutput();
@@ -117,20 +121,29 @@ void ChannelSync::handleProbeFinished(int exitCode)
 
 void ChannelSync::startListing()
 {
+    if (m_pendingKinds.isEmpty()) {
+        finishListing();
+        return;
+    }
+
     m_stage = Stage::Listing;
     m_stderr.clear();
+    m_stdoutBuffer.clear();
+    m_currentKind = m_pendingKinds.takeFirst();
 
     m_process = makeProcess();
-    m_process->setArguments(YtDlp::channelListArgs(m_url, m_settings));
+    m_process->setArguments(
+        YtDlp::channelListArgs(YtDlp::tabUrl(m_url, m_currentKind), m_settings));
 
     connect(m_process, &QProcess::readyReadStandardOutput,
             this, &ChannelSync::handleListingReadyRead);
     connect(m_process, &QProcess::finished, this,
             [this](int code, QProcess::ExitStatus) { handleListingFinished(code); });
 
-    emit statusChanged(m_channel.title.isEmpty()
-                           ? tr("Loading video list…")
-                           : tr("Loading videos from %1…").arg(m_channel.title));
+    emit statusChanged(tr("Loading %1 from %2…")
+                           .arg(videoKindLabel(m_currentKind).toLower() + tr("s"),
+                                m_channel.title.isEmpty() ? tr("the channel")
+                                                          : m_channel.title));
     emit progress(0, m_expectedTotal);
     m_process->start();
 }
@@ -169,6 +182,10 @@ void ChannelSync::consumeEntryLine(const QByteArray &line)
     VideoInfo v = YtDlp::parseFlatEntry(entry);
     if (v.videoId.isEmpty())
         return;
+    // parseFlatEntry may already have identified a livestream from the entry;
+    // otherwise the tab it came from decides.
+    if (v.kind == VideoKind::Video)
+        v.kind = m_currentKind;
     m_videos.append(v);
 
     // If the probe told us nothing, fill in the channel from the first entry
@@ -188,6 +205,25 @@ void ChannelSync::handleListingFinished(int exitCode)
         m_stdoutBuffer.clear();
     }
 
+    if (m_process) {
+        m_process->disconnect(this);
+        m_process->deleteLater();
+        m_process = nullptr;
+    }
+
+    // A channel with no shorts simply answers with nothing; that is not a
+    // failure, and the remaining tabs still have to be listed.
+    if (!m_pendingKinds.isEmpty()) {
+        m_lastExitCode = exitCode;
+        startListing();
+        return;
+    }
+
+    finishListing(exitCode);
+}
+
+void ChannelSync::finishListing(int exitCode)
+{
     const QByteArray stderrCopy = m_stderr;
     const ChannelInfo channel = m_channel;
     const QVector<VideoInfo> videos = m_videos;

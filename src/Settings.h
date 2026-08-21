@@ -61,6 +61,12 @@ struct Settings {
     // changes far faster than this program is rebuilt.
     QString extractorArgs;
 
+    // Which channel tabs to list. Each is a separate request, so a channel with
+    // no shorts costs nothing but an empty response.
+    bool syncVideos = true;
+    bool syncShorts = false;
+    bool syncLivestreams = false;
+
     // Sidecar artefacts worth keeping for a preservation archive
     bool writeInfoJson  = true;
     bool writeThumbnail = true;

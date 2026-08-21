@@ -11,10 +11,13 @@ program is the catalog, the interface and the archival discipline around it.
 ## What it does
 
 - Add channels by URL or handle (`@channelname`, `youtube.com/@name`, `/channel/UC…`)
+- Catalogues regular uploads, shorts and past livestreams, with a filter and a
+  badge on each card
 - Loads the full upload list without downloading anything
 - Card grid with thumbnails, durations, dates, view and like counts, and
   per-video state; cards name their channel in the combined view
-- Per-video checkboxes, plus *select all*, *select not archived*, *download everything missing*
+- Per-video checkboxes, plus *select all*, *select not archived*, *download
+  everything missing* - all scoped to whatever the filters are showing
 - Concurrent downloads with live progress, speed and ETA; cancel one or all
 - Retry a single failed video, or every failure in the current view at once
 - Left navigation panel listing every channel in the catalog
@@ -587,6 +590,28 @@ canvas, so a light version would vanish against pale thumbnails.
 - Cookie options exist for material your own account can see - age-restricted,
   unlisted, memberships - but an anonymous visitor cannot.
 
+## Videos, shorts and livestreams
+
+A channel keeps these on three separate tabs, and listing one says nothing about
+the others. **Preferences > Content** chooses which to catalogue; each is a
+separate request when a channel is refreshed, so a channel with no shorts costs
+only an empty response.
+
+Only regular uploads are listed by default. A channel that posts mostly shorts
+will look nearly empty until *Shorts* is enabled - and enabling a type affects
+the next refresh, not the existing catalog, so use **Channel > Refresh video
+list** to pick it up.
+
+The toolbar has an **All types / Videos / Shorts / Livestreams** filter, and
+cards carry a badge in the corner of the thumbnail: a tall frame with a play
+mark for a short, a broadcast dot for a livestream. Regular uploads are
+unbadged, which keeps the common case clean. The badges are painted rather than
+loaded from files, so they follow the theme.
+
+A past livestream usually appears on the uploads tab as well. When a listing
+identifies one - the entry carries its live status - that wins over the tab it
+happened to be found under, so it is not miscatalogued as a plain video.
+
 ## What the cards show
 
 Thumbnail, duration, title, date, and counts. In **All videos** each card also
@@ -597,6 +622,22 @@ Like counts appear only for videos that have been downloaded. A flat channel
 listing does not carry them - they are read from `.info.json` when a download
 completes, along with a refreshed view count. A hidden like count stays absent
 rather than showing as zero.
+
+## Selecting and filtering
+
+The toolbar's buttons act on **what is currently visible**, not the whole
+channel. Filter to Shorts and *Select all* picks the shorts; search for a word
+and it picks the matches. *Retry failed* and *Download everything missing* are
+scoped the same way, and their counts follow the filter.
+
+*Clear selection* is the exception: it clears everything, visible or not.
+Leaving a hidden video checked would put it into the next download without ever
+appearing on screen.
+
+Picks survive a filter change, so you can narrow by one thing, select, widen and
+narrow by another. When that leaves something checked but off-screen, the count
+beside the download buttons says so - *12 selected (5 hidden by the filter)* -
+because those videos would still be downloaded.
 
 ## Panels
 
@@ -923,10 +964,9 @@ reproduces the same gap at the same timestamp, it is in the original.
 Worth reading before trusting this with an archive you care about.
 
 **Coverage**
-- Only the `/videos` tab is listed. Shorts, live streams and premieres live on
-  separate tabs and are not enumerated, so a Shorts-heavy channel looks nearly
-  empty.
 - Playlists and individual video URLs cannot be added - channels only.
+- Currently-live broadcasts and scheduled premieres are listed but cannot be
+  downloaded until they finish.
 - `channels.avatar_path` exists in the schema but is never populated, so the
   navigation panel shows no channel icons.
 - Descriptions are usually blank until a video is downloaded.
@@ -980,7 +1020,6 @@ Worth reading before trusting this with an archive you care about.
 
 ## Extending it
 
-- **Shorts and streams tabs**, per the coverage limitation above.
 - **Scheduled syncs.** A `QTimer` plus a "watch this channel" flag gives
   automatic capture of new uploads.
 - **Path re-basing**, so an archive can move between drives or machines.

@@ -4,6 +4,17 @@
 #include <QDateTime>
 #include <QVector>
 
+// Which channel tab a video came from. The service keeps regular uploads,
+// shorts and past livestreams on separate tabs, and a flat listing of one says
+// nothing about the others.
+enum class VideoKind {
+    Video      = 0,
+    Short      = 1,
+    Livestream = 2
+};
+
+QString videoKindLabel(VideoKind kind);
+
 // Lifecycle of a single video inside the archive.
 enum class DownloadState {
     NotDownloaded = 0,
@@ -41,6 +52,7 @@ struct VideoInfo {
     QDateTime uploadDate;
     bool      dateIsApproximate = true;  // true until confirmed from the real info.json
     QString   channelTitle;   // filled in by queries, for the "All videos" view
+    VideoKind kind = VideoKind::Video;
     qint64    durationSecs = 0;
     qint64    viewCount = -1;
     // Only known once a video has been downloaded: a flat channel listing does

@@ -31,6 +31,52 @@ QFont derivedFont(const QFont &base, double deltaPoints, bool bold)
     return f;
 }
 
+// Badges are painted rather than loaded: no image files to ship, and they
+// follow the theme's colours without a second set for the light scheme.
+void paintShortBadge(QPainter *painter, const QRectF &box, const ThemePalette &t)
+{
+    // A tall 9:16 frame with a play mark, echoing the format itself.
+    const qreal w = box.height() * 0.62;
+    const QRectF frame(box.center().x() - w / 2, box.top(), w, box.height());
+
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(t.accent);
+    painter->drawRoundedRect(frame, frame.width() * 0.28, frame.width() * 0.28);
+
+    const qreal s = frame.width() * 0.42;
+    const QPointF c = frame.center();
+    QPolygonF play({ QPointF(c.x() - s * 0.4, c.y() - s * 0.6),
+                     QPointF(c.x() + s * 0.7, c.y()),
+                     QPointF(c.x() - s * 0.4, c.y() + s * 0.6) });
+    painter->setBrush(Qt::white);
+    painter->drawPolygon(play);
+}
+
+void paintLiveBadge(QPainter *painter, const QRectF &box, const ThemePalette &t)
+{
+    // A broadcast mark: a dot with two arcs radiating from it.
+    const QPointF centre(box.left() + box.width() * 0.34, box.center().y());
+    const qreal dot = box.height() * 0.17;
+
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(t.accent);
+    painter->drawEllipse(centre, dot, dot);
+
+    QPen pen(t.accent);
+    pen.setWidthF(qMax(1.4, box.height() * 0.11));
+    pen.setCapStyle(Qt::RoundCap);
+    painter->setPen(pen);
+    painter->setBrush(Qt::NoBrush);
+
+    for (int i = 1; i <= 2; ++i) {
+        const qreal r = dot + i * box.height() * 0.20;
+        const QRectF arc(centre.x() - r, centre.y() - r, r * 2, r * 2);
+        // Two opposing wedges, so it reads as a signal rather than a target.
+        painter->drawArc(arc, -50 * 16, 100 * 16);
+        painter->drawArc(arc, 130 * 16, 100 * 16);
+    }
+}
+
 QString metaLine(const QModelIndex &index)
 {
     QStringList bits;
@@ -147,6 +193,27 @@ void VideoCardDelegate::paint(QPainter *painter, const QStyleOptionViewItem &opt
         painter->drawRoundedRect(badge, 4, 4);
         painter->setPen(t.durationBadgeText);
         painter->drawText(badge, Qt::AlignCenter, duration);
+    }
+
+    // --- kind badge ---------------------------------------------------------
+    const auto kind = static_cast<VideoKind>(index.data(VideoModel::KindRole).toInt());
+    if (kind != VideoKind::Video) {
+        const int side = 22;
+        const QRect plate(thumb.left() + 6, thumb.bottom() - side - 6, side, side);
+
+        // A dark plate behind it, because the badge sits on the artwork and
+        // has to stay legible over a pale thumbnail.
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(t.durationBadge);
+        painter->drawRoundedRect(plate, 5, 5);
+
+        const QRectF inner = QRectF(plate).adjusted(5, 4, -5, -4);
+        painter->save();
+        if (kind == VideoKind::Short)
+            paintShortBadge(painter, inner, t);
+        else
+            paintLiveBadge(painter, inner, t);
+        painter->restore();
     }
 
     // --- state badge -------------------------------------------------------

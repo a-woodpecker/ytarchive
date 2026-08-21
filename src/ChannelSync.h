@@ -22,23 +22,23 @@ class ChannelSync : public QObject
 {
     Q_OBJECT
 public:
-    explicit ChannelSync(QObject* parent = nullptr);
+    explicit ChannelSync(QObject *parent = nullptr);
     ~ChannelSync() override;
 
-    void setSettings(const Settings& s) { m_settings = s; }
+    void setSettings(const Settings &s) { m_settings = s; }
     bool isRunning() const { return m_stage != Stage::Idle; }
 
     // `input` may be a handle, a channel URL, or a bare channel id.
-    void start(const QString& input);
+    void start(const QString &input);
     void cancel();
 
 signals:
-    void statusChanged(const QString& message);
+    void statusChanged(const QString &message);
     // `total` is -1 when the channel's size is not known in advance, which is
     // the common case. Callers should show an indeterminate bar plus the count.
     void progress(int loaded, int total);
-    void finished(const ChannelInfo& channel, const QVector<VideoInfo>& videos);
-    void failed(const QString& message);
+    void finished(const ChannelInfo &channel, const QVector<VideoInfo> &videos);
+    void failed(const QString &message);
     void cancelled();
 
 private:
@@ -49,15 +49,18 @@ private:
     void handleProbeFinished(int exitCode);
     void handleListingReadyRead();
     void handleListingFinished(int exitCode);
-    void consumeEntryLine(const QByteArray& line);
+    void finishListing(int exitCode = 0);
+    void consumeEntryLine(const QByteArray &line);
     void teardown();
-    QProcess* makeProcess();
+    QProcess *makeProcess();
 
     Settings   m_settings;
-    QProcess* m_process = nullptr;
+    QProcess  *m_process = nullptr;
     Stage      m_stage = Stage::Idle;
 
-    QString    m_url;
+    QString    m_url;                 // bare channel URL, no tab
+    QVector<VideoKind> m_pendingKinds; // tabs still to list
+    VideoKind  m_currentKind = VideoKind::Video;
     ChannelInfo m_channel;
     QVector<VideoInfo> m_videos;
 
@@ -66,5 +69,6 @@ private:
     QByteArray m_stderr;
 
     int  m_expectedTotal = -1;
+    int  m_lastExitCode = 0;
     bool m_cancelRequested = false;
 };
