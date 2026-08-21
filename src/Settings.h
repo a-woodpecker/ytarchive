@@ -46,6 +46,11 @@ struct Settings {
     // is the better answer where that is possible.
     bool allowRemoteComponents = false;
 
+    // Records a SHA-256 of each finished file, and writes it beside the media
+    // as a .sha256 sidecar. Nothing upstream publishes a hash of these files,
+    // so this is the only way to detect later corruption.
+    bool checksumDownloads = true;
+
     // Adds -v and stops suppressing warnings, and logs the exact command line
     // for every yt-dlp invocation. The only way to see plugin and PO token
     // diagnostics from inside the application.

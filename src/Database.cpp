@@ -45,6 +45,8 @@ VideoInfo readVideo(const QSqlQuery &q)
     v.durationSecs     = q.value("duration").toLongLong();
     v.viewCount        = q.value("view_count").toLongLong();
     v.likeCount        = q.value("like_count").toLongLong();
+    v.sha256           = q.value("sha256").toString();
+    v.hashedAt         = dtFromDb(q.value("hashed_at"));
     // Present only on the joined query used by the video list.
     const int channelTitleColumn = q.record().indexOf(QStringLiteral("channel_title"));
     if (channelTitleColumn >= 0)
@@ -131,7 +133,9 @@ bool Database::applySchema(QString *error)
         QStringLiteral("CREATE INDEX IF NOT EXISTS idx_videos_state ON videos(state)"),
         // Added after the first release; ALTER is the only way to reach an
         // existing catalog, and it is harmless to attempt every start-up.
-        QStringLiteral("ALTER TABLE videos ADD COLUMN like_count INTEGER NOT NULL DEFAULT -1")
+        QStringLiteral("ALTER TABLE videos ADD COLUMN like_count INTEGER NOT NULL DEFAULT -1"),
+        QStringLiteral("ALTER TABLE videos ADD COLUMN sha256 TEXT"),
+        QStringLiteral("ALTER TABLE videos ADD COLUMN hashed_at INTEGER")
     };
 
     QSqlQuery q(m_db);
@@ -371,12 +375,39 @@ bool Database::recordDownload(qint64 pk,
     return q.exec();
 }
 
+bool Database::setChecksum(qint64 pk, const QString &sha256)
+{
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral(
+        "UPDATE videos SET sha256 = :hash, hashed_at = :now WHERE id = :id"));
+    q.bindValue(":hash", sha256);
+    q.bindValue(":now", QDateTime::currentSecsSinceEpoch());
+    q.bindValue(":id", pk);
+    return q.exec();
+}
+
+QVector<VideoInfo> Database::videosWithChecksums()
+{
+    QVector<VideoInfo> out;
+    QSqlQuery q(m_db);
+    if (!q.exec(QStringLiteral(
+            "SELECT v.*, c.title AS channel_title FROM videos v "
+            "JOIN channels c ON c.id = v.channel_id "
+            "WHERE v.state = 3 AND v.sha256 IS NOT NULL AND v.sha256 <> '' "
+            "ORDER BY v.upload_date DESC NULLS LAST, v.id DESC")))
+        return out;
+    while (q.next())
+        out.append(readVideo(q));
+    return out;
+}
+
 bool Database::clearDownload(qint64 pk)
 {
     QSqlQuery q(m_db);
     q.prepare(QStringLiteral(
         "UPDATE videos SET state = 0, file_path = NULL, info_json_path = NULL,"
-        "  file_size = 0, error_text = NULL WHERE id = :id"));
+        "  file_size = 0, error_text = NULL, sha256 = NULL, hashed_at = NULL "
+        "WHERE id = :id"));
     q.bindValue(":id", pk);
     return q.exec();
 }

@@ -23,6 +23,7 @@ program is the catalog, the interface and the archival discipline around it.
 - Dark and light themes, switchable without restarting
 - Resizable panels; **View** toggles each one and resets the layout
 - Saves sidecar metadata: `.info.json`, thumbnail, description, subtitles, optionally comments
+- Records a SHA-256 of every finished file, and can re-verify the whole archive
 
 ## How the archive is laid out
 
@@ -473,6 +474,47 @@ with no `--version` flag, so "it starts and stays up" is the meaningful signal.
 The release job also installs the `.deb` and removes it again, so a broken
 dependency list fails the build rather than a user's machine.
 
+## Checksums
+
+**There is no upstream hash to compare against.** The service publishes a byte
+count for each stream, not a digest, and yt-dlp verifies only that count. In any
+case the files here are assembled locally - separate video and audio streams
+merged by ffmpeg, with metadata embedded - so the bytes on disk never existed on
+any server. Nothing upstream could describe them.
+
+So the digest is taken here, from the finished file. That is what fixity means
+for an archive: not proof that a download was correct, but proof that a file is
+still byte-for-byte what was written, months or years later, after the disk it
+lives on has had time to go quietly wrong.
+
+Each finished download is hashed with SHA-256. The digest goes into the catalog
+and into a `.sha256` sidecar beside the media, in the format `sha256sum -c`
+reads - so the archive can be checked with standard tools, with or without this
+program:
+
+```bash
+cd ~/Videos/Archive/SomeChannel
+sha256sum -c *.sha256
+```
+
+The sidecar carries the same timestamp as the media file, so it sorts with the
+record it belongs to.
+
+**Downloads > Verify the archive** re-reads every file with a recorded digest
+and reports any that no longer match. It reads every byte, so it takes about as
+long as copying the archive. A single card can be checked from its context menu
+with *Verify this file*.
+
+A mismatch is reported and never silently repaired: it means the file has
+changed since it was archived, and only you can say whether that was deliberate.
+Forgetting a downloaded copy clears its digest too, so a re-download is never
+compared against the file it replaced.
+
+Hashing runs on one low-priority background thread, one file at a time -
+reading several multi-gigabyte files at once from the same disk is slower than
+reading them in turn. Turn it off under **Preferences > What to keep** if the
+extra read on each download is not worth it.
+
 ## Themes
 
 **File > Preferences > Locations > Theme** offers Dark, Light and *Match the
@@ -503,6 +545,7 @@ canvas, so a light version would vanish against pale thumbnails.
 | `Database.*` | SQLite schema, upserts that never clobber download state |
 | `YtDlp.*` | every yt-dlp argument, in one auditable place |
 | `ChannelSync.*` | two-stage streaming channel listing via `QProcess` |
+| `ChecksumService.*` | background SHA-256 hashing and verification |
 | `DownloadManager.*` | bounded concurrent queue, progress parsing, timestamp stamping |
 | `VideoModel.*` | list model plus search/state filter proxy |
 | `VideoCardDelegate.*` | the painted video card |
@@ -897,10 +940,9 @@ Worth reading before trusting this with an archive you care about.
 - The on-disk thumbnail cache grows without bound and is never pruned.
 
 **Preservation gaps**
-- No checksums. Nothing detects silent corruption or a truncated file that
-  yt-dlp nonetheless exited cleanly on.
 - Success is inferred from yt-dlp's exit code and the file existing; the media
-  is never probed for playability or duration.
+  is never probed for playability or duration. A checksum proves a file has not
+  changed since it was archived, not that it was correct when it arrived.
 - "Removed from the service" is not distinguished from "download failed" - both
   land in the Failed state.
 - Re-downloading at higher quality is unsupported. *Forget the downloaded copy*
@@ -938,9 +980,6 @@ Worth reading before trusting this with an archive you care about.
 
 ## Extending it
 
-- **Checksums.** A `sha256` column hashed on completion is the single most
-  useful addition for a preservation archive: it turns "I have the file" into
-  "I can prove the file is intact."
 - **Shorts and streams tabs**, per the coverage limitation above.
 - **Scheduled syncs.** A `QTimer` plus a "watch this channel" flag gives
   automatic capture of new uploads.

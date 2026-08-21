@@ -32,6 +32,7 @@ qt_add_executable(ytarchive
     src/Database.h            src/Database.cpp
     src/YtDlp.h               src/YtDlp.cpp
     src/ChannelSync.h         src/ChannelSync.cpp
+    src/ChecksumService.h     src/ChecksumService.cpp
     src/DownloadManager.h     src/DownloadManager.cpp
     src/ThumbnailCache.h      src/ThumbnailCache.cpp
     src/VideoModel.h          src/VideoModel.cpp

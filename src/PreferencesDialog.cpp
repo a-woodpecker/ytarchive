@@ -298,6 +298,22 @@ PreferencesDialog::PreferencesDialog(const Settings &current, QWidget *parent)
     addCheck(m_comments,        tr("Comments (slow; adds minutes per video)"), current.writeComments);
     addCheck(m_embedMetadata,   tr("Embed title and date in the media file"), current.embedMetadata);
     addCheck(m_embedChapters,   tr("Embed chapter markers"),             current.embedChapters);
+    addCheck(m_checksumDownloads,
+             tr("Record a checksum, and write it beside the video"),
+             current.checksumDownloads);
+
+    auto *checksumNote = new QLabel(
+        tr("A SHA-256 of the finished file, stored in the catalog and written as a "
+           "<tt>.sha256</tt> sidecar in the format <tt>sha256sum -c</tt> reads. Nothing "
+           "upstream publishes a hash of these files - they are assembled here from "
+           "separate streams - so this is the only way to prove later that a file is "
+           "still what was archived. Hashing costs one full read of each file as it "
+           "finishes.<br><br>"
+           "Verify the whole archive from <b>Downloads &gt; Verify the archive</b>."), this);
+    checksumNote->setWordWrap(true);
+    checksumNote->setObjectName(QStringLiteral("hint"));
+    artefactLayout->addWidget(checksumNote);
+
     artefactLayout->addStretch();
 
     tabs->addTab(scrollable(artefacts), tr("What to keep"));
@@ -451,6 +467,7 @@ Settings PreferencesDialog::result() const
     s.writeComments     = m_comments->isChecked();
     s.embedMetadata     = m_embedMetadata->isChecked();
     s.embedChapters     = m_embedChapters->isChecked();
+    s.checksumDownloads = m_checksumDownloads->isChecked();
     s.theme             = m_theme->currentData().toString();
     s.checkUpdatesOnStartup = m_checkUpdates->isChecked();
     // Index 0 is "None"; anything else is either a listed browser or typed.

@@ -46,6 +46,10 @@ struct VideoInfo {
     // Only known once a video has been downloaded: a flat channel listing does
     // not carry it, so it stays -1 until the info.json is read.
     qint64    likeCount = -1;
+
+    // Fixity: a digest of the file as written, and when it was taken.
+    QString   sha256;
+    QDateTime hashedAt;
     qint64    fileSize = 0;
     DownloadState state = DownloadState::NotDownloaded;
 

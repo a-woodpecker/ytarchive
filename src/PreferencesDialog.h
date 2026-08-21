@@ -53,6 +53,7 @@ private:
     QCheckBox *m_comments;
     QCheckBox *m_embedMetadata;
     QCheckBox *m_embedChapters;
+    QCheckBox *m_checksumDownloads;
     QCheckBox *m_checkUpdates;
     QComboBox *m_theme;
 };

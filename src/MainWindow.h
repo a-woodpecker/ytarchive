@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ChannelSync.h"
+#include "ChecksumService.h"
 #include "Database.h"
 #include "DownloadManager.h"
 #include "Models.h"
@@ -55,6 +56,7 @@ private slots:
     void onVideoContextMenu(const QPoint &pos);
     void onVideoActivated(const QModelIndex &index);
     void cancelAllDownloads();
+    void verifyArchive();
     void checkForUpdates();
     void checkYtDlpVersion();
     void onUpdateAvailable(const UpdateChecker::Release &release, bool userInitiated);
@@ -87,6 +89,7 @@ private:
     VideoFilterProxy*m_proxy = nullptr;
     ChannelSync     *m_sync = nullptr;
     UpdateChecker   *m_updates = nullptr;
+    ChecksumService *m_checksums = nullptr;
     DownloadManager *m_downloads = nullptr;
 
     QListWidget *m_channelList = nullptr;
@@ -116,6 +119,10 @@ private:
     bool m_firstShowHandled = false;
     bool m_repaintQueued = false;
     bool m_forbiddenHintShown = false;
+    int  m_verifyTotal = 0;
+    int  m_verifyDone = 0;
+    int  m_verifyFailed = 0;
+    bool m_verifyRunning = false;
     QByteArray m_defaultState;   // layout as built, for View > Reset layout
     int  m_syncTotalCount = 0;        // channels in the current "Sync all" pass
     int  m_syncDoneCount = 0;

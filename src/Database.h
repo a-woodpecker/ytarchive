@@ -43,6 +43,9 @@ public:
                         const QDateTime &confirmedUploadDate,
                         qint64 likeCount = -1,
                         qint64 viewCount = -1);
+    bool setChecksum(qint64 pk, const QString &sha256);
+    // Every downloaded video that has a digest recorded, for a bulk check.
+    QVector<VideoInfo> videosWithChecksums();
     bool clearDownload(qint64 pk);
 
     // Marks rows whose media file has vanished from disk.

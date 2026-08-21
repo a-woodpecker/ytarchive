@@ -65,6 +65,8 @@ MainWindow::MainWindow(QWidget *parent)
     m_downloads = new DownloadManager(&m_db, this);
     m_downloads->setSettings(m_settings);
 
+    m_checksums = new ChecksumService(this);
+
     m_updates = new UpdateChecker(this);
     m_updates->setRepository(QStringLiteral(YTA_GITHUB_REPO));
     m_updates->setCurrentVersion(QStringLiteral(YTA_VERSION));
@@ -127,8 +129,14 @@ MainWindow::MainWindow(QWidget *parent)
                         "through. Reduce simultaneous downloads to 1 and set the pause "
                         "options under Preferences > Downloading.\n"));
                 }
-                if (ok)
+                if (ok) {
                     m_model->refreshVideo(m_db.video(pk));
+                    if (m_settings.checksumDownloads) {
+                        const VideoInfo saved = m_db.video(pk);
+                        if (!saved.filePath.isEmpty())
+                            m_checksums->enqueue(pk, saved.filePath);
+                    }
+                }
                 updateCounters();
                 updateRetryButton();
                 reloadChannels(currentChannelPk());
@@ -165,6 +173,56 @@ MainWindow::MainWindow(QWidget *parent)
             m_log->appendPlainText(tr("Further thumbnail errors suppressed."));
         }
         ++reported;
+    });
+
+    connect(m_checksums, &ChecksumService::computed, this,
+            [this](qint64 pk, const QString &path, const QString &digest) {
+        m_db.setChecksum(pk, digest);
+        ChecksumService::writeSidecar(path, digest);
+        m_model->refreshVideo(m_db.video(pk));
+        m_log->appendPlainText(tr("Checksum %1  %2")
+                                   .arg(digest.left(16), QFileInfo(path).fileName()));
+    });
+    connect(m_checksums, &ChecksumService::verified, this,
+            [this](qint64 pk, const QString &path, bool matches,
+                   const QString &digest, const QString &expected) {
+        Q_UNUSED(pk);
+        ++m_verifyDone;
+        if (!matches) {
+            ++m_verifyFailed;
+            // Loud, and never silently repaired: a mismatch means the file has
+            // changed since it was archived, and only the operator can say
+            // whether that was deliberate.
+            m_log->appendPlainText(tr("CHECKSUM MISMATCH  %1\n  recorded %2\n  now      %3")
+                                       .arg(QFileInfo(path).fileName(), expected, digest));
+        }
+        if (m_verifyRunning) {
+            statusBar()->showMessage(tr("Verifying %1 of %2…")
+                                         .arg(m_verifyDone).arg(m_verifyTotal));
+        }
+    });
+    connect(m_checksums, &ChecksumService::failed, this,
+            [this](qint64 pk, const QString &path, const QString &error) {
+        Q_UNUSED(pk);
+        ++m_verifyDone;
+        m_log->appendPlainText(tr("Checksum failed for %1: %2")
+                                   .arg(QFileInfo(path).fileName(), error));
+    });
+    connect(m_checksums, &ChecksumService::queueDrained, this, [this] {
+        if (!m_verifyRunning)
+            return;
+        m_verifyRunning = false;
+        const QString summary =
+            m_verifyFailed == 0
+                ? tr("All %n file(s) match their recorded checksum.", "", m_verifyDone)
+                : tr("%n file(s) do not match their recorded checksum. See the Output tab.",
+                     "", m_verifyFailed);
+        m_log->appendPlainText(summary);
+        statusBar()->showMessage(summary, 15000);
+        if (m_verifyFailed > 0)
+            QMessageBox::warning(this, tr("Verification finished"), summary);
+        else
+            QMessageBox::information(this, tr("Verification finished"), summary);
     });
 
     connect(m_updates, &UpdateChecker::updateAvailable, this, &MainWindow::onUpdateAvailable);
@@ -486,6 +544,8 @@ void MainWindow::buildActions()
     downloadMenu->addAction(tr("&Retry failed downloads"),
                             QKeySequence(QStringLiteral("Ctrl+Shift+R")),
                             this, &MainWindow::retryFailedDownloads);
+    downloadMenu->addSeparator();
+    downloadMenu->addAction(tr("&Verify the archive…"), this, &MainWindow::verifyArchive);
     downloadMenu->addSeparator();
     downloadMenu->addAction(tr("&Cancel all downloads"),
                             QKeySequence(QStringLiteral("Ctrl+Shift+X")),
@@ -925,6 +985,12 @@ void MainWindow::onVideoContextMenu(const QPoint &pos)
                              state == DownloadState::Queued);
 
     menu.addSeparator();
+    QAction *verifyAction = menu.addAction(tr("Verify this file"));
+    verifyAction->setEnabled(state == DownloadState::Downloaded
+                             && !filePath.isEmpty() && QFileInfo::exists(filePath));
+    if (verifyAction->isEnabled() && details.sha256.isEmpty())
+        verifyAction->setText(tr("Record a checksum for this file"));
+
     QAction *forgetAction = menu.addAction(tr("Forget the downloaded copy"));
     forgetAction->setEnabled(state == DownloadState::Downloaded ||
                              state == DownloadState::Missing ||
@@ -950,6 +1016,12 @@ void MainWindow::onVideoContextMenu(const QPoint &pos)
             QUrl(QStringLiteral("https://www.youtube.com/watch?v=") + videoId));
     } else if (chosen == cancelAction) {
         m_downloads->cancel(pk);
+    } else if (chosen == verifyAction) {
+        m_verifyRunning = false;   // a single file reports on its own
+        m_checksums->enqueue(pk, filePath, details.sha256);
+        statusBar()->showMessage(details.sha256.isEmpty()
+                                     ? tr("Recording a checksum…")
+                                     : tr("Verifying…"), 5000);
     } else if (chosen == forgetAction) {
         m_db.clearDownload(pk);
         m_model->refreshVideo(m_db.video(pk));
@@ -1078,6 +1150,38 @@ void MainWindow::checkYtDlpVersion()
     });
 
     proc->start();
+}
+
+void MainWindow::verifyArchive()
+{
+    const QVector<VideoInfo> videos = m_db.videosWithChecksums();
+    if (videos.isEmpty()) {
+        QMessageBox::information(this, tr("Nothing to verify"),
+            tr("No checksums have been recorded yet. They are taken as videos "
+               "finish downloading, when \"Record a checksum\" is enabled in "
+               "Preferences."));
+        return;
+    }
+
+    const auto answer = QMessageBox::question(
+        this, tr("Verify the archive"),
+        tr("Re-read %n file(s) and compare them against their recorded checksums?\n\n"
+           "Every byte is read, so this takes roughly as long as copying the archive.",
+           "", videos.size()),
+        QMessageBox::Cancel | QMessageBox::Yes, QMessageBox::Yes);
+    if (answer != QMessageBox::Yes)
+        return;
+
+    m_verifyTotal = videos.size();
+    m_verifyDone = 0;
+    m_verifyFailed = 0;
+    m_verifyRunning = true;
+
+    for (const VideoInfo &v : videos)
+        m_checksums->enqueue(v.pk, v.filePath, v.sha256);
+
+    m_downloadsDock->show();
+    m_log->appendPlainText(tr("Verifying %n file(s)…", "", videos.size()));
 }
 
 void MainWindow::checkForUpdates()
