@@ -12,7 +12,8 @@ program is the catalog, the interface and the archival discipline around it.
 
 - Add channels by URL or handle (`@channelname`, `youtube.com/@name`, `/channel/UC…`)
 - Loads the full upload list without downloading anything
-- Card grid with thumbnails, durations, dates, view counts and per-video state
+- Card grid with thumbnails, durations, dates, view and like counts, and
+  per-video state; cards name their channel in the combined view
 - Per-video checkboxes, plus *select all*, *select not archived*, *download everything missing*
 - Concurrent downloads with live progress, speed and ETA; cancel one or all
 - Retry a single failed video, or every failure in the current view at once
@@ -104,11 +105,16 @@ those. The same applies to yt-dlp installed with pipx, which lands in
 and their equivalents prepended to `PATH`, so a child yt-dlp can find a runtime
 the desktop session did not expose.
 
-**Install yt-dlp yourself rather than from a distribution package.** Packaged
-versions lag badly, and a stale yt-dlp fails against the service in ways that
-look like faults in this program. `pipx install yt-dlp` on Linux or macOS,
-`winget install -e --id yt-dlp.yt-dlp` on Windows, and keep it updated. This
-warning is the single most common cause of "it stopped working".
+**Install yt-dlp with pip or pipx, not from a package manager.** Two reasons.
+Packaged versions lag badly, and a stale yt-dlp fails against the service in
+ways that look like faults in this program - the single most common cause of
+"it stopped working". And packaged builds bundle their own Python, so the
+plugins described below cannot reach them.
+
+```bash
+pipx install yt-dlp     # Linux, macOS
+pip install -U yt-dlp   # Windows
+```
 
 ## Building on Linux
 
@@ -232,11 +238,25 @@ C:\Qt\6.11.1\msvc2022_64\bin\windeployqt.exe build\windows-ninja\ytarchive.exe
 
 ```bat
 winget install -e --id Gyan.FFmpeg
-winget install -e --id yt-dlp.yt-dlp
+winget install -e --id Python.Python.3.13
+pip install -U yt-dlp
 ```
 
 Reopen your terminal, then confirm `ffmpeg -version`, `ffprobe -version` and
 `yt-dlp --version` all respond. If they do, leave the paths in Preferences empty.
+
+**Install yt-dlp with pip, not winget.** The winget package is a standalone
+`yt-dlp.exe` carrying its own bundled Python, and the two plugins this needs -
+the challenge solver and the PO token provider - can then never be found:
+`pip install` reports success while installing them into a different Python
+entirely. Installing yt-dlp with pip puts everything in one place, and every
+plugin instruction then works as written.
+
+If you would rather not install Python, winget's yt-dlp is fine for downloads
+that need no plugins. For the challenge solver, enable **Preferences >
+Downloading > Allow yt-dlp to download its challenge solver**, which needs no
+plugin. The PO token provider has no equivalent shortcut: its plugin archive has
+to be extracted into `%APPDATA%\yt-dlp\plugins` by hand.
 
 FFmpeg ships no official Windows installer, so winget pulls a community build
 (gyan.dev) which intermittently fails to add itself to `PATH`. If it isn't
@@ -266,7 +286,6 @@ Usual causes are files left flat instead of under `src\` and `resources\`, a
 browser appending suffixes (`main (1).cpp`, or `MainWindow.cpp.txt` - turn on
 *View > File name extensions* in Explorer), or an extra nesting level. The build
 stops at the first missing file, so verify all of them.
-`tools\verify-tree.ps1` checks the whole layout against git in one pass.
 
 **"cl.exe is not able to compile a simple test program" (LNK2001 / LNK4272).**
 Scan the log for `LNK4272` warnings naming `...\um\x86\kernel32.lib` - the
@@ -355,7 +374,7 @@ intend to support** - which is why the release workflow builds the `.deb`
 inside a `debian:12` container rather than on the Ubuntu runner.
 
 The distribution codename stays in the filename and version
-(`ytarchive_0.2.1~bookworm_amd64.deb`) as a record of where it was built.
+(`ytarchive_0.2.2~bookworm_amd64.deb`) as a record of where it was built.
 Architecture is likewise whatever you built on, so an arm64 machine needs its
 own build.
 
@@ -416,10 +435,10 @@ architecture, then by distribution codename where the name carries one:
 
 | Running on | Offered |
 |---|---|
-| Windows x86_64 | `YTArchive-0.2.1-setup.exe` |
-| Debian 12 amd64 | `ytarchive_0.2.1~bookworm_amd64.deb` |
-| Ubuntu 24.04 amd64 | `ytarchive_0.2.1~noble_amd64.deb` |
-| Debian arm64 | `ytarchive_0.2.1~bookworm_arm64.deb` |
+| Windows x86_64 | `YTArchive-0.2.2-setup.exe` |
+| Debian 12 amd64 | `ytarchive_0.2.2~bookworm_amd64.deb` |
+| Ubuntu 24.04 amd64 | `ytarchive_0.2.2~noble_amd64.deb` |
+| Debian arm64 | `ytarchive_0.2.2~bookworm_arm64.deb` |
 | Anything with no matching build | the release page |
 
 Each narrowing step is skipped when it would leave nothing, so a release with a
@@ -497,11 +516,8 @@ canvas, so a light version would vanish against pale thumbnails.
 | `Theme.*` | both colour schemes, and everything the cards paint |
 | `FileTime.*` | cross-platform timestamp stamping |
 | `Models.*` | shared structs and formatting helpers |
-| `resources/` | stylesheets, icon, desktop entry |
+| `resources/` | stylesheets, icons, Windows resource script, desktop entry |
 | `packaging/` | Inno Setup script, build scripts, `.deb` packaging |
-| `tools/verify-tree.ps1` | checks the repository layout against git |
-| `tools/check-audio.sh` | decodes archived files to find corrupt or truncated audio |
-| `tools/test-403.sh` | tries a failing video several ways to isolate the cause of a 403 |
 | `SetupDialog.*` | checks the external tools and reports what is missing |
 
 ## Behaviour worth knowing
@@ -527,6 +543,17 @@ canvas, so a light version would vanish against pale thumbnails.
   says so rather than failing silently.
 - Cookie options exist for material your own account can see - age-restricted,
   unlisted, memberships - but an anonymous visitor cannot.
+
+## What the cards show
+
+Thumbnail, duration, title, date, and counts. In **All videos** each card also
+names its channel; inside a single channel that line is dropped, since it would
+repeat on every card, and the cards shrink accordingly.
+
+Like counts appear only for videos that have been downloaded. A flat channel
+listing does not carry them - they are read from `.info.json` when a download
+completes, along with a refreshed view count. A hidden like count stays absent
+rather than showing as zero.
 
 ## Panels
 
@@ -693,6 +720,15 @@ current details, which change often.
 Setting a provider up needs two pieces: a plugin for yt-dlp, and a generator
 for it to talk to.
 
+**On Windows, check how yt-dlp was installed first.** A build from winget or a
+downloaded `yt-dlp.exe` is a standalone executable carrying its own bundled
+Python, so `pip install` puts the plugin into a different Python that yt-dlp
+never reads - pip reports success and nothing changes. Either install yt-dlp
+itself with pip or pipx so both share one Python, or extract the plugin's
+release archive into the directory yt-dlp scans, usually
+`%APPDATA%\yt-dlp\plugins`. **Help > Check download support** reports the
+install type and the exact directory, and adjusts its instructions to match.
+
 ```bash
 pipx inject yt-dlp bgutil-ytdlp-pot-provider     # the plugin
 ```
@@ -731,19 +767,28 @@ them off until they are needed.
 
 ### Narrowing it down
 
-`tools/test-403.sh` tries one video several ways and reports which combinations
-work, so the choice between "change a setting" and "install a token provider"
-is made on evidence:
+Run one failing video several ways and see which combination works. Each
+attempt downloads for a few seconds - long enough, because a 403 is raised when
+the media URL is first requested rather than at the end.
 
 ```bash
-./tools/test-403.sh "https://www.youtube.com/watch?v=VIDEOID"
+URL="https://www.youtube.com/watch?v=VIDEOID"
+
+# As the application runs it
+yt-dlp -f "bv*+ba/b" --merge-output-format mkv -P /tmp/403test "$URL"
+
+# Without the client that is being forced onto SABR
+yt-dlp --extractor-args "youtube:player_client=default,-web_safari" \
+       -f "bv*+ba/b" -P /tmp/403test "$URL"
+
+# A single pre-combined stream: lower quality, fewer moving parts
+yt-dlp -f b -P /tmp/403test "$URL"
 ```
 
-Pick a video that reliably fails. Each attempt runs with the same flags the
-application uses and downloads for a few seconds - long enough, because a 403
-is raised when the media URL is first requested, not at the end. If one
-variant works, the script prints the exact setting to change. If they all
-fail, client selection is not the cause and a PO token provider is needed.
+If one of these works, put the matching setting into Preferences - the
+extractor argument under *Downloading > Extractor arguments*, or `b` as the
+quality. If they all fail with 403, client selection is not the cause: check
+the runtime, solver and token provider under **Help > Check download support**.
 
 ### Pacing options
 
@@ -797,31 +842,38 @@ youtube:player_client=default,-android_vr
 ## If the audio cuts out
 
 Merged files combine a separate video stream and audio stream, so a defect can
-come from three places. This tells them apart:
+come from three places. Decoding to null exercises the whole file without
+writing anything:
 
 ```bash
-./tools/check-audio.sh ~/Videos/Archive
+ffmpeg -nostdin -v error -i "the-file.mkv" -f null -
 ```
 
-It decodes each file to null - exercising the whole stream without writing
-anything - and separately measures how far the audio actually runs against the
-container length, which catches audio that stops early without erroring.
+Silence means the file decodes cleanly. Errors mean it is genuinely damaged.
 
-- **Decode errors** mean the file is genuinely damaged. Re-download it.
-- **"audio runs Ns, container Ms"** means the audio stream is short. Re-download.
-- **Everything reports ok** but it still sounds wrong: the file is fine and the
-  problem is playback. Opus audio in Matroska trips up some players; try mpv or
-  VLC before suspecting the download.
+Audio that stops early can decode without error, so also compare how far it
+actually runs against the container length - Matroska rarely stores a per-stream
+duration, so the audio has to be decoded rather than read from metadata:
 
-A damaged file is most often the result of an interrupted download resuming
-badly. Delete the affected `.mkv` **and** the channel's `.incomplete` folder
-before retrying, because a stale partial file is what a retry would resume
-from. Note that *Forget the downloaded copy* clears the catalog entry but
-leaves the file on disk, so remove it yourself.
+```bash
+ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "the-file.mkv"
+ffmpeg -nostdin -v error -stats -i "the-file.mkv" -map 0:a:0 -f null - 2>&1 | tail -1
+```
 
-Livestream VODs sometimes contain genuine gaps in the source. If a
-re-download reproduces the same gap at the same timestamp, it is in the
-original.
+If those two disagree by more than a second, the audio stream is short and the
+file should be downloaded again.
+
+A file that passes both but still sounds wrong is a playback problem, not a
+download problem. Opus audio in Matroska trips up some players; try mpv or VLC
+before suspecting the download.
+
+When re-downloading, delete the affected file **and** the channel's
+`.incomplete` folder - a stale partial is what a retry would resume from.
+*Forget the downloaded copy* clears the catalog entry but leaves the file, so
+remove it yourself.
+
+Livestream VODs sometimes contain genuine gaps in the source. If a re-download
+reproduces the same gap at the same timestamp, it is in the original.
 
 ## Known limitations
 
