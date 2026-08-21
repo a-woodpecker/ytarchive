@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include "CsvIo.h"
 #include "DownloadsPanel.h"
 #include "PreferencesDialog.h"
 #include "SetupDialog.h"
@@ -19,6 +20,7 @@
 #include <QDir>
 #include <QDockWidget>
 #include <QFile>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -547,6 +549,9 @@ void MainWindow::buildActions()
     fileMenu->addAction(tr("&Add channel…"), QKeySequence(QStringLiteral("Ctrl+N")),
                         this, &MainWindow::addChannel);
     fileMenu->addAction(tr("Open archive &folder"), this, &MainWindow::openArchiveFolder);
+    fileMenu->addSeparator();
+    fileMenu->addAction(tr("&Export what is shown to CSV…"), this, &MainWindow::exportCsv);
+    fileMenu->addAction(tr("&Import from CSV…"), this, &MainWindow::importCsv);
     fileMenu->addSeparator();
     fileMenu->addAction(tr("&Preferences…"), QKeySequence::Preferences,
                         this, &MainWindow::openPreferences);
@@ -1259,6 +1264,79 @@ void MainWindow::verifyArchive()
 
     m_downloadsDock->show();
     m_log->appendPlainText(tr("Verifying %n file(s)…", "", videos.size()));
+}
+
+void MainWindow::exportCsv()
+{
+    // Exports what the filters are showing, like every other toolbar action.
+    const QVector<VideoInfo> videos = visibleVideos();
+    if (videos.isEmpty()) {
+        statusBar()->showMessage(tr("There is nothing on screen to export."), 5000);
+        return;
+    }
+
+    const ChannelInfo channel = currentChannel();
+    const QString suggested =
+        QDir(QDir::homePath()).filePath(
+            (channel.title.isEmpty() ? tr("archive") : sanitizeForPath(channel.title))
+            + QStringLiteral("-")
+            + QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd"))
+            + QStringLiteral(".csv"));
+
+    const QString path = QFileDialog::getSaveFileName(
+        this, tr("Export %n video(s)", "", videos.size()), suggested,
+        tr("CSV files (*.csv);;All files (*)"));
+    if (path.isEmpty())
+        return;
+
+    QString error;
+    if (!Csv::exportVideos(videos, path, &error)) {
+        QMessageBox::warning(this, tr("Export failed"), error);
+        return;
+    }
+
+    m_log->appendPlainText(tr("Exported %n row(s) to %1", "", videos.size())
+                               .arg(QFileInfo(path).fileName()));
+    statusBar()->showMessage(tr("Exported %n video(s).", "", videos.size()), 8000);
+}
+
+void MainWindow::importCsv()
+{
+    const QString path = QFileDialog::getOpenFileName(
+        this, tr("Import from CSV"), QDir::homePath(),
+        tr("CSV files (*.csv);;All files (*)"));
+    if (path.isEmpty())
+        return;
+
+    const Csv::ImportResult result = Csv::importCatalog(m_db, path);
+
+    if (!result.ok) {
+        QMessageBox::warning(this, tr("Import failed"),
+                             result.problems.isEmpty()
+                                 ? tr("The file could not be read.")
+                                 : result.problems.join(QChar('\n')));
+        return;
+    }
+
+    reloadChannels(currentChannelPk());
+    updateCounters();
+
+    QString summary = tr("Added %n video(s)", "", result.videosAdded);
+    if (result.videosAlreadyKnown > 0)
+        summary += tr(", %n already in the catalog", "", result.videosAlreadyKnown);
+    if (result.rowsSkipped > 0)
+        summary += tr(", %n row(s) skipped", "", result.rowsSkipped);
+    summary += QStringLiteral(".");
+
+    m_log->appendPlainText(summary);
+    for (const QString &problem : result.problems)
+        m_log->appendPlainText(QStringLiteral("  ") + problem);
+
+    QMessageBox::information(this, tr("Import finished"),
+        summary + QStringLiteral("\n\n")
+        + tr("Download state, file locations and checksums were not imported: they "
+             "describe the machine the file came from. Use Refresh to bring the "
+             "listings up to date, then download what you want."));
 }
 
 void MainWindow::checkForUpdates()

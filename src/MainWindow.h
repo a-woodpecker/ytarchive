@@ -58,6 +58,8 @@ private slots:
     void onVideoActivated(const QModelIndex &index);
     void cancelAllDownloads();
     void verifyArchive();
+    void exportCsv();
+    void importCsv();
     void checkForUpdates();
     void checkYtDlpVersion();
     void onUpdateAvailable(const UpdateChecker::Release &release, bool userInitiated);

@@ -27,6 +27,7 @@ program is the catalog, the interface and the archival discipline around it.
 - Resizable panels; **View** toggles each one and resets the layout
 - Saves sidecar metadata: `.info.json`, thumbnail, description, subtitles, optionally comments
 - Records a SHA-256 of every finished file, and can re-verify the whole archive
+- Exports the catalog to CSV, and imports one back
 
 ## How the archive is laid out
 
@@ -477,6 +478,33 @@ with no `--version` flag, so "it starts and stays up" is the meaningful signal.
 The release job also installs the `.deb` and removes it again, so a broken
 dependency list fails the build rather than a user's machine.
 
+## CSV export and import
+
+**File > Export what is shown to CSV** writes one row per video, with the
+channel repeated on each row so the file stands alone. It exports what the
+filters are showing, like every other action in the toolbar - so a channel, a
+search, or only the shorts, depending on what is on screen.
+
+Columns: channel id, title and URL; video id, watch URL, title, kind; upload
+date and whether it is approximate; duration, view and like counts; download
+state, file path, size and checksum.
+
+Quoting follows RFC 4180, so titles containing commas, quotation marks and even
+newlines survive the round trip, and the file opens correctly in a spreadsheet.
+A byte order mark is written, which is what spreadsheets need to read UTF-8.
+
+**File > Import from CSV** adds channels and videos the catalog does not already
+have. Column order is read from the header, so a file with columns rearranged or
+removed still imports, and `video_id` can be recovered from a watch URL if that
+column is absent. Importing the same file twice adds nothing the second time.
+
+**Download state, file paths and checksums are deliberately not imported.**
+They describe the disk of whichever machine produced the export. Importing them
+would mark videos as archived when nothing is on disk here, and record checksums
+for files that do not exist. After importing, refresh the channels and download
+what you want - the archive itself is never described by a file from somewhere
+else.
+
 ## Checksums
 
 **There is no upstream hash to compare against.** The service publishes a byte
@@ -549,6 +577,7 @@ canvas, so a light version would vanish against pale thumbnails.
 | `YtDlp.*` | every yt-dlp argument, in one auditable place |
 | `ChannelSync.*` | two-stage streaming channel listing via `QProcess` |
 | `ChecksumService.*` | background SHA-256 hashing and verification |
+| `CsvIo.*` | RFC 4180 CSV reading and writing for the catalog |
 | `DownloadManager.*` | bounded concurrent queue, progress parsing, timestamp stamping |
 | `VideoModel.*` | list model plus search/state filter proxy |
 | `VideoCardDelegate.*` | the painted video card |
@@ -1023,8 +1052,6 @@ Worth reading before trusting this with an archive you care about.
 - **Scheduled syncs.** A `QTimer` plus a "watch this channel" flag gives
   automatic capture of new uploads.
 - **Path re-basing**, so an archive can move between drives or machines.
-- **Export.** Writing catalog rows to CSV or JSON-LD makes the archive
-  ingestible by other tools.
 
 ## Legal note
 

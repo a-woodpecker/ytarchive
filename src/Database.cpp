@@ -48,10 +48,17 @@ VideoInfo readVideo(const QSqlQuery &q)
     v.likeCount        = q.value("like_count").toLongLong();
     v.sha256           = q.value("sha256").toString();
     v.hashedAt         = dtFromDb(q.value("hashed_at"));
-    // Present only on the joined query used by the video list.
-    const int channelTitleColumn = q.record().indexOf(QStringLiteral("channel_title"));
+    // Present only on the joined queries used by the video list and by export.
+    const QSqlRecord record = q.record();
+    const int channelTitleColumn = record.indexOf(QStringLiteral("channel_title"));
     if (channelTitleColumn >= 0)
         v.channelTitle = q.value(channelTitleColumn).toString();
+    const int channelIdentColumn = record.indexOf(QStringLiteral("channel_ident"));
+    if (channelIdentColumn >= 0)
+        v.channelIdent = q.value(channelIdentColumn).toString();
+    const int channelUrlColumn = record.indexOf(QStringLiteral("channel_url"));
+    if (channelUrlColumn >= 0)
+        v.channelUrl = q.value(channelUrlColumn).toString();
     v.fileSize         = q.value("file_size").toLongLong();
     v.state            = static_cast<DownloadState>(q.value("state").toInt());
     return v;
@@ -303,12 +310,14 @@ QVector<VideoInfo> Database::videos(qint64 channelPk)
     QSqlQuery q(m_db);
     if (channelPk < 0) {
         q.prepare(QStringLiteral(
-            "SELECT v.*, c.title AS channel_title FROM videos v "
+            "SELECT v.*, c.title AS channel_title, c.channel_id AS channel_ident,"
+            "       c.url AS channel_url FROM videos v "
             "JOIN channels c ON c.id = v.channel_id "
             "ORDER BY v.upload_date DESC NULLS LAST, v.id DESC"));
     } else {
         q.prepare(QStringLiteral(
-            "SELECT v.*, c.title AS channel_title FROM videos v "
+            "SELECT v.*, c.title AS channel_title, c.channel_id AS channel_ident,"
+            "       c.url AS channel_url FROM videos v "
             "JOIN channels c ON c.id = v.channel_id "
             "WHERE v.channel_id = :cid "
             "ORDER BY v.upload_date DESC NULLS LAST, v.id DESC"));
@@ -400,7 +409,8 @@ QVector<VideoInfo> Database::videosWithChecksums()
     QVector<VideoInfo> out;
     QSqlQuery q(m_db);
     if (!q.exec(QStringLiteral(
-            "SELECT v.*, c.title AS channel_title FROM videos v "
+            "SELECT v.*, c.title AS channel_title, c.channel_id AS channel_ident,"
+            "       c.url AS channel_url FROM videos v "
             "JOIN channels c ON c.id = v.channel_id "
             "WHERE v.state = 3 AND v.sha256 IS NOT NULL AND v.sha256 <> '' "
             "ORDER BY v.upload_date DESC NULLS LAST, v.id DESC")))

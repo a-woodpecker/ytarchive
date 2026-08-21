@@ -51,7 +51,10 @@ struct VideoInfo {
     QString   errorText;
     QDateTime uploadDate;
     bool      dateIsApproximate = true;  // true until confirmed from the real info.json
-    QString   channelTitle;   // filled in by queries, for the "All videos" view
+    // Filled in by the queries that join the channel, for display and for export.
+    QString   channelTitle;
+    QString   channelIdent;   // the "UC..." id, not the catalog primary key
+    QString   channelUrl;
     VideoKind kind = VideoKind::Video;
     qint64    durationSecs = 0;
     qint64    viewCount = -1;
